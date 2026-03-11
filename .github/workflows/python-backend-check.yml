@@ -1,0 +1,49 @@
+name: Backend Python Check
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+  pull_request:
+    paths:
+      - 'backend/**'
+
+jobs:
+  backend-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install flake8 mypy black
+
+      - name: Check Python syntax
+        run: |
+          cd backend
+          python -m compileall .
+
+      - name: Check code style and logic errors
+        run: |
+          cd backend
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --max-complexity=10 --statistics
+
+      - name: Check type errors
+        run: |
+          cd backend
+          mypy . --ignore-missing-imports
+
+      - name: Check code formatting
+        run: |
+          cd backend
+          black --check .
