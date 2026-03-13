@@ -50,7 +50,7 @@ def receive_sensor_data(data: SensorData):
     # Clean sensor data
     data_dict = clean_sensor_data(data_dict, collection)
 
-    #Transform data
+    # Transform data
     data_dict = transform_sensor_data(data_dict)
 
     # Insert data
