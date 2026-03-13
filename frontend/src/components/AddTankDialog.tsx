@@ -14,21 +14,46 @@ interface AddTankDialogProps {
 
 const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
   const [name, setName] = useState('');
+  const [temperature, setTemperature] = useState('');
+  const [ph, setPh] = useState('');
+  const [turbidity, setTurbidity] = useState('');
+  const [light, setLight] = useState('');
+  const [tds, setTds] = useState('');
   const { addTank, tanks } = useTanks();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
+    const trimmedName = name.trim();
+    const trimmedTemperature = temperature.trim();
+    const trimmedPh = ph.trim();
+    const trimmedTurbidity = turbidity.trim();
+    const trimmedLight = light.trim();
+    const trimmedTds = tds.trim();
 
-    if (tanks.some(t => t.name.toLowerCase() === trimmed.toLowerCase())) {
+    if (!trimmedName || !trimmedTemperature || !trimmedPh || !trimmedTurbidity || !trimmedLight || !trimmedTds) {
+      return;
+    }
+
+    if (tanks.some(t => t.name.toLowerCase() === trimmedName.toLowerCase())) {
       toast.error('A tank with this name already exists');
       return;
     }
 
-    addTank(trimmed);
-    toast.success(`${trimmed} has been added`);
+    addTank(trimmedName, {
+      temperature: trimmedTemperature,
+      ph: trimmedPh,
+      turbidity: trimmedTurbidity,
+      light: trimmedLight,
+      tds: trimmedTds,
+    });
+
+    toast.success(`${trimmedName} has been added`);
     setName('');
+    setTemperature('');
+    setPh('');
+    setTurbidity('');
+    setLight('');
+    setTds('');
     onOpenChange(false);
   };
 
@@ -50,6 +75,57 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
               autoFocus
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tank-temperature">Safe Temperature</Label>
+            <Input
+              id="tank-temperature"
+              placeholder="e.g. 25°C"
+              value={temperature}
+              onChange={e => setTemperature(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tank-ph">Safe pH</Label>
+            <Input
+              id="tank-ph"
+              placeholder="e.g. 7.5"
+              value={ph}
+              onChange={e => setPh(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tank-turbidity">Safe Turbidity</Label>
+            <Input
+              id="tank-turbidity"
+              placeholder="e.g. 5 NTU"
+              value={turbidity}
+              onChange={e => setTurbidity(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tank-light">Safe Light</Label>
+            <Input
+              id="tank-light"
+              placeholder="e.g. 300 lux"
+              value={light}
+              onChange={e => setLight(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tank-tds">Safe TDS</Label>
+            <Input
+              id="tank-tds"
+              placeholder="e.g. 500 ppm"
+              value={tds}
+              onChange={e => setTds(e.target.value)}
+            />
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

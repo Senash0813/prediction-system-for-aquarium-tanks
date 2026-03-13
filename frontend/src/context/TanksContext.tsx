@@ -3,7 +3,7 @@ import { tanks as initialTanks, Tank, generateTimeSeries, TankStatus } from '@/d
 
 interface TanksContextType {
   tanks: Tank[];
-  addTank: (name: string) => void;
+  addTank: (name: string, details: { temperature: string; ph: string; turbidity: string; light: string; tds: string }) => void;
   deleteTank: (id: string) => void;
 }
 
@@ -12,7 +12,7 @@ const TanksContext = createContext<TanksContextType | undefined>(undefined);
 export const TanksProvider = ({ children }: { children: ReactNode }) => {
   const [tanks, setTanks] = useState<Tank[]>(initialTanks);
 
-  const addTank = (name: string) => {
+  const addTank = (name: string, details: { temperature: string; ph: string; turbidity: string; light: string; tds: string }) => {
     const id = `tank-${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
     const newTank: Tank = {
       id,
@@ -20,13 +20,13 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
       stressScore: 10,
       status: 'safe' as TankStatus,
       insight: 'New tank – monitoring started',
-      temperature: { value: 24.0, status: 'safe', unit: '°C', trend: 'stable', label: 'Temperature' },
-      ph: { value: 7.0, status: 'safe', unit: '', trend: '↔', label: 'pH Level' },
-      turbidity: { value: 1.5, status: 'safe', unit: 'NTU', trend: 'stable', label: 'Turbidity' },
+      temperature: { value: parseFloat(details.temperature), status: 'safe', unit: '°C', trend: 'stable', label: 'Temperature' },
+      ph: { value: parseFloat(details.ph), status: 'safe', unit: '', trend: '↔', label: 'pH Level' },
+      turbidity: { value: parseFloat(details.turbidity), status: 'safe', unit: 'NTU', trend: 'stable', label: 'Turbidity' },
       stressHistory: generateTimeSeries(10, 3, 24),
-      temperatureHistory: generateTimeSeries(24.0, 0.5, 24),
-      phHistory: generateTimeSeries(7.0, 0.15, 24),
-      turbidityHistory: generateTimeSeries(1.5, 0.3, 24),
+      temperatureHistory: generateTimeSeries(parseFloat(details.temperature), 0.5, 24),
+      phHistory: generateTimeSeries(parseFloat(details.ph), 0.15, 24),
+      turbidityHistory: generateTimeSeries(parseFloat(details.turbidity), 0.3, 24),
       notifications: [
         { id: `${id}-n1`, en: 'Tank created. Monitoring has begun.', si: 'ටැංකිය සාදන ලදී. නිරීක්ෂණය ආරම්භ කර ඇත.', severity: 'safe', timestamp: 'Just now' },
       ],
