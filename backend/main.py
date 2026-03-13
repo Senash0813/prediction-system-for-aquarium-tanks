@@ -44,14 +44,14 @@ def receive_sensor_data(data: SensorData):
     # Convert to dictionary
     data_dict = data.model_dump()
 
-    # Clean sensor data
-    data_dict = clean_sensor_data(data_dict)
-
-    #Transform data
-    data_dict = transform_sensor_data(data_dict)
-
     # Select collection based on tank
     collection = db[data.tank_id]
+
+    # Clean sensor data
+    data_dict = clean_sensor_data(data_dict, collection)
+
+    # Transform data
+    data_dict = transform_sensor_data(data_dict)
 
     # Insert data
     collection.insert_one(data_dict)
@@ -60,3 +60,4 @@ def receive_sensor_data(data: SensorData):
         "status": "stored",
         "tank": data.tank_id
     }
+
