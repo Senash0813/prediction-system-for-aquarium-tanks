@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Sinhala:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 200 20% 97%;
+    --foreground: 210 30% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 30% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 30% 15%;
+
+    --primary: 192 80% 30%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 195 30% 92%;
+    --secondary-foreground: 192 80% 25%;
+
+    --muted: 200 15% 93%;
+    --muted-foreground: 210 10% 50%;
+
+    --accent: 192 60% 90%;
+    --accent-foreground: 192 80% 25%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 20% 90%;
+    --input: 200 20% 90%;
+    --ring: 192 80% 30%;
+
+    --radius: 0.75rem;
+
+    --safe: 152 60% 42%;
+    --safe-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 15%;
+    --critical: 0 72% 55%;
+    --critical-foreground: 0 0% 100%;
+
+    --sidebar-background: 200 25% 98%;
+    --sidebar-foreground: 210 20% 30%;
+    --sidebar-primary: 192 80% 30%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 192 60% 94%;
+    --sidebar-accent-foreground: 192 80% 25%;
+    --sidebar-border: 200 20% 92%;
+    --sidebar-ring: 192 80% 30%;
+
+    --chart-safe: 152 60% 42%;
+    --chart-warning: 38 92% 50%;
+    --chart-critical: 0 72% 55%;
+    --chart-primary: 192 80% 40%;
+  }
+
+  .dark {
+    --background: 210 25% 8%;
+    --foreground: 200 15% 90%;
+
+    --card: 210 20% 12%;
+    --card-foreground: 200 15% 90%;
+
+    --popover: 210 20% 12%;
+    --popover-foreground: 200 15% 90%;
+
+    --primary: 192 80% 45%;
+    --primary-foreground: 210 25% 8%;
+
+    --secondary: 200 20% 18%;
+    --secondary-foreground: 192 60% 70%;
+
+    --muted: 210 15% 16%;
+    --muted-foreground: 200 10% 55%;
+
+    --accent: 192 40% 18%;
+    --accent-foreground: 192 60% 70%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 15% 18%;
+    --input: 210 15% 18%;
+    --ring: 192 80% 45%;
+
+    --safe: 152 55% 45%;
+    --safe-foreground: 0 0% 100%;
+    --warning: 38 85% 55%;
+    --warning-foreground: 38 85% 15%;
+    --critical: 0 70% 58%;
+    --critical-foreground: 0 0% 100%;
+
+    --sidebar-background: 210 22% 10%;
+    --sidebar-foreground: 200 15% 80%;
+    --sidebar-primary: 192 80% 45%;
+    --sidebar-primary-foreground: 210 25% 8%;
+    --sidebar-accent: 192 30% 16%;
+    --sidebar-accent-foreground: 192 60% 70%;
+    --sidebar-border: 210 15% 18%;
+    --sidebar-ring: 192 80% 45%;
+
+    --chart-safe: 152 55% 45%;
+    --chart-warning: 38 85% 55%;
+    --chart-critical: 0 70% 58%;
+    --chart-primary: 192 80% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  .font-sinhala {
+    font-family: 'Noto Sans Sinhala', 'Inter', sans-serif;
+  }
+}
+
+@layer utilities {
+  .status-safe {
+    @apply border-l-4;
+    border-left-color: hsl(var(--safe));
+  }
+  .status-warning {
+    @apply border-l-4;
+    border-left-color: hsl(var(--warning));
+  }
+  .status-critical {
+    @apply border-l-4;
+    border-left-color: hsl(var(--critical));
+  }
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+  }
+}
