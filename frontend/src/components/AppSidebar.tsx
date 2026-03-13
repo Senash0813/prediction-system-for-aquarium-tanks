@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Home, Plus, Fish, X, Moon, Sun } from 'lucide-react';
-import { tanks } from '@/data/dummyData';
+import { useTanks } from '@/context/TanksContext';
 import { useTheme } from '@/hooks/useTheme';
+import AddTankDialog from './AddTankDialog';
 
 const statusDot: Record<string, string> = {
   safe: 'bg-safe',
@@ -33,6 +35,9 @@ const DarkModeToggle = () => {
 };
 
 const AppSidebar = ({ open, onClose }: AppSidebarProps) => {
+  const { tanks } = useTanks();
+  const [dialogOpen, setDialogOpen] = useState(false);
+
   return (
     <>
       {/* Overlay for mobile */}
@@ -105,12 +110,17 @@ const AppSidebar = ({ open, onClose }: AppSidebarProps) => {
         {/* Dark mode toggle + Add Tank */}
         <div className="border-t px-3 py-4 space-y-3">
           <DarkModeToggle />
-          <button className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary">
+          <button
+            onClick={() => setDialogOpen(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          >
             <Plus className="h-4 w-4" />
             Add Tank
           </button>
         </div>
       </aside>
+
+      <AddTankDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </>
   );
 };

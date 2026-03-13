@@ -1,8 +1,10 @@
 import AlertBanner from '@/components/AlertBanner';
 import TankCard from '@/components/TankCard';
-import { tanks } from '@/data/dummyData';
+import { useTanks } from '@/context/TanksContext';
 
 const Index = () => {
+  const { tanks } = useTanks();
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>

@@ -37,7 +37,7 @@ export interface Tank {
   notifications: Notification[];
 }
 
-const generateTimeSeries = (
+export const generateTimeSeries = (
   base: number,
   variance: number,
   hours: number,

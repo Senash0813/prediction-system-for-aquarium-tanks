@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { getTankById } from '@/data/dummyData';
+import { useTanks } from '@/context/TanksContext';
 import InsightCard from '@/components/InsightCard';
 import TrendChart from '@/components/TrendChart';
 import PredictiveNotifications from '@/components/PredictiveNotifications';
@@ -8,7 +8,8 @@ import CircularGauge from '@/components/CircularGauge';
 
 const TankDashboard = () => {
   const { tankId } = useParams<{ tankId: string }>();
-  const tank = getTankById(tankId || '');
+  const { tanks } = useTanks();
+  const tank = tanks.find(t => t.id === (tankId || ''));
 
   if (!tank) {
     return (

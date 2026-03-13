@@ -2,15 +2,17 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, ShieldCheck } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
-import { getTankById, getMetricData, generateData, metricLabels } from '@/data/dummyData';
+import { getMetricData, generateData, metricLabels } from '@/data/dummyData';
+import { useTanks } from '@/context/TanksContext';
 
 type TimeRange = '24h' | '7d' | '30d';
 
 const MetricDetail = () => {
   const { tankId, metricId } = useParams<{ tankId: string; metricId: string }>();
   const [range, setRange] = useState<TimeRange>('24h');
+  const { tanks } = useTanks();
 
-  const tank = getTankById(tankId || '');
+  const tank = tanks.find(t => t.id === (tankId || ''));
   if (!tank || !metricId) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20">
