@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useTanks } from '@/context/TanksContext';
 import { toast } from 'sonner';
+import '@/styles/responsive.css';
 
 interface AddTankDialogProps {
   open: boolean;
