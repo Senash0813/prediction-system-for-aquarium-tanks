@@ -34,14 +34,11 @@ def categorize_turbidity(raw):
 
 
 def transform_sensor_data(data):
-
     data["ingestion_time"] = datetime.now(timezone.utc)
-
-    data["sampling_interval"] = 60
+    data["sampling_interval"] = 1
 
     # Replace raw numerical values with categorical labels
     data["light"] = categorize_light(data["light"])
     data["turbidity"] = categorize_turbidity(data["turbidity"])
 
     return data
-

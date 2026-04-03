@@ -1,3 +1,4 @@
 backend/.env
 backend/venv/
 backend/__pycache__/
+backend/raw_generator/__pycache__/
