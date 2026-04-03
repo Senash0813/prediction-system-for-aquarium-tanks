@@ -12,52 +12,52 @@ def get_hour_fraction(timestamp: datetime) -> float:
 
 def generate_tank1_sensor_reading(timestamp: datetime) -> dict:
     """
-    Generate realistic RAW sensor data for tank_1.
-    These values are inserted into raw_tank_1 first.
-    Then your processing script will clean + transform them and store in tank_1.
+    Generate realistic RAW sensor data for tank_1 using real-world units.
+
+    Units:
+    - temperature: Celsius
+    - ph: pH scale
+    - turbidity: NTU
+    - tds: ppm
+    - light: lux
     """
 
     hour = get_hour_fraction(timestamp)
 
-    # Temperature: tropical aquarium range
+    # Temperature (°C) - tropical freshwater aquarium
     base_temp = 25.5
-    if 10 <= hour <= 18:
-        temp_shift = 0.6
-    else:
-        temp_shift = -0.2
+    temp_shift = 0.4 if 10 <= hour <= 18 else -0.2
+    temperature = random.gauss(base_temp + temp_shift, 0.3)
+    temperature = round(clamp(temperature, 24.0, 27.5), 2)
 
-    temperature = random.gauss(base_temp + temp_shift, 0.35)
-    temperature = round(clamp(temperature, 24.0, 28.0), 2)
+    # pH - typical freshwater tropical aquarium
+    ph = random.gauss(7.2, 0.15)
+    ph = round(clamp(ph, 6.8, 7.8), 2)
 
-    # pH: slight natural fluctuation
-    ph = random.gauss(7.4, 0.15)
-    ph = round(clamp(ph, 6.9, 8.0), 2)
+    # Turbidity (NTU) - lower means clearer
+    turbidity = random.gauss(3.0, 1.2)
 
-    # Turbidity: use higher raw scale because your transform.py expects big values
-    # >=3000 -> Crystal Clear, >=2500 -> Very Clear, etc.
-    turbidity = random.gauss(2800, 180)
-
-    # around feeding times water gets slightly disturbed
+    # Slight disturbance around feeding times
     if 8 <= hour <= 9 or 18 <= hour <= 19:
-        turbidity -= random.uniform(80, 220)
+        turbidity += random.uniform(1.0, 4.0)
 
-    turbidity = round(clamp(turbidity, 1600, 3300), 2)
+    turbidity = round(clamp(turbidity, 0.2, 20.0), 2)
 
-    # TDS
-    tds = random.gauss(420, 20)
-    tds = round(clamp(tds, 360, 500), 2)
+    # TDS (ppm) - realistic freshwater aquarium range
+    tds = random.gauss(320, 30)
+    tds = round(clamp(tds, 200, 450), 2)
 
-    # Light by time of day
+    # Light (lux) - simulate daily aquarium lighting
     if 0 <= hour < 6:
-        light = random.uniform(0, 25)
+        light = random.uniform(0, 10)
     elif 6 <= hour < 8:
-        light = random.uniform(80, 350)
+        light = random.uniform(50, 300)
     elif 8 <= hour < 17:
-        light = random.uniform(1000, 4500)
+        light = random.uniform(800, 2500)
     elif 17 <= hour < 20:
-        light = random.uniform(250, 1200)
+        light = random.uniform(150, 800)
     else:
-        light = random.uniform(20, 120)
+        light = random.uniform(0, 50)
 
     light = round(light, 2)
 
@@ -72,19 +72,18 @@ def generate_tank1_sensor_reading(timestamp: datetime) -> dict:
         "processed": False
     }
 
-    # Small anomaly rate to test your cleaning.py
-    # These invalid values should be corrected during processing
+    # Small anomaly rate to test cleaning.py
     anomaly_roll = random.random()
 
     if anomaly_roll < 0.02:
-        raw_doc["temperature"] = 120.0
+        raw_doc["temperature"] = 120.0   # invalid Celsius
     elif anomaly_roll < 0.04:
-        raw_doc["ph"] = 20.0
+        raw_doc["ph"] = 20.0             # invalid pH
     elif anomaly_roll < 0.06:
-        raw_doc["turbidity"] = -40.0
+        raw_doc["turbidity"] = -5.0      # invalid NTU
     elif anomaly_roll < 0.08:
-        raw_doc["tds"] = 6500.0
+        raw_doc["tds"] = 7000.0          # invalid ppm
     elif anomaly_roll < 0.10:
-        raw_doc["light"] = -200.0
+        raw_doc["light"] = -100.0        # invalid lux
 
     return raw_doc

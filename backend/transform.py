@@ -1,4 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+SL_TIMEZONE = ZoneInfo("Asia/Colombo")
 
 
 def categorize_light(lux):
@@ -17,24 +20,26 @@ def categorize_light(lux):
     else:
         return "Too Bright"
 
-
 def categorize_turbidity(raw):
     if raw is None:
         return None
-    if raw >= 3000:
+    if raw <= 1:
         return "Crystal Clear"
-    elif raw >= 2500:
+    elif raw <= 5:
         return "Very Clear"
-    elif raw >= 2000:
-        return "Normal"
-    elif raw >= 1500:
+    elif raw <= 10:
+        return "Clear"
+    elif raw <= 25:
+        return "Slightly Cloudy"
+    elif raw <= 50:
         return "Cloudy"
+    elif raw <= 100:
+        return "Very Cloudy"
     else:
         return "Dirty"
 
-
 def transform_sensor_data(data):
-    data["ingestion_time"] = datetime.now(timezone.utc)
+    data["ingestion_time"] = datetime.now(SL_TIMEZONE)
     data["sampling_interval"] = 1
 
     # Replace raw numerical values with categorical labels
