@@ -4,8 +4,14 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
 
-from config import DATABASE_NAME, RAW_COLLECTION_TANK1, DEFAULT_DAYS, DEFAULT_INTERVAL_MINUTES
-from tank1_profile import generate_tank1_sensor_reading
+from config import (
+    DATABASE_NAME,
+    RAW_COLLECTION_TANK1,
+    DEFAULT_DAYS,
+    DEFAULT_INTERVAL_MINUTES,
+    RANDOM_SEED,
+)
+from tank1_profile import Tank1Simulator
 
 # Load environment variables
 load_dotenv()
@@ -45,11 +51,12 @@ def main():
     print(f"Interval: {interval_minutes} minutes")
     print("-" * 50)
 
+    simulator = Tank1Simulator(seed=RANDOM_SEED)
     timestamps = list(generate_time_series(days, interval_minutes))
     documents = []
 
     for ts in timestamps:
-        doc = generate_tank1_sensor_reading(ts)
+        doc = simulator.generate_reading(ts)
         documents.append(doc)
 
     if not documents:

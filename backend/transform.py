@@ -20,6 +20,7 @@ def categorize_light(lux):
     else:
         return "Too Bright"
 
+
 def categorize_turbidity(raw):
     if raw is None:
         return None
@@ -38,12 +39,29 @@ def categorize_turbidity(raw):
     else:
         return "Dirty"
 
-def transform_sensor_data(data):
-    data["ingestion_time"] = datetime.now(SL_TIMEZONE)
-    data["sampling_interval"] = 1
 
-    # Replace raw numerical values with categorical labels
+def categorize_tds(tds):
+    if tds is None:
+        return None
+    if tds < 150:
+        return "Very Low"
+    elif tds < 300:
+        return "Ideal"
+    elif tds < 500:
+        return "Slightly High"
+    elif tds < 800:
+        return "High"
+    else:
+        return "Very High"
+
+
+def transform_sensor_data(data, sampling_interval_minutes):
+    data["ingestion_time"] = datetime.now(SL_TIMEZONE)
+    data["sampling_interval"] = sampling_interval_minutes
+
+    # Replace numeric values with category labels
     data["light"] = categorize_light(data["light"])
     data["turbidity"] = categorize_turbidity(data["turbidity"])
+    data["tds"] = categorize_tds(data["tds"])
 
     return data
