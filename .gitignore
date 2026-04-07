@@ -2,3 +2,4 @@ backend/.env
 backend/venv/
 backend/__pycache__/
 backend/raw_generator/__pycache__/
+backend/analytics_engine/water_chemistry_analytics/__pycache__/
