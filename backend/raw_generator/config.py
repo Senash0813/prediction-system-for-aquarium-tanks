@@ -1,0 +1,10 @@
+DATABASE_NAME = "aqua_gaurd_db"
+
+RAW_COLLECTION_TANK1 = "raw_tank_1"
+PROCESSED_COLLECTION_TANK1 = "tank_1"
+
+DEFAULT_DAYS = 21
+DEFAULT_INTERVAL_MINUTES = 3
+
+# For reproducible synthetic data
+RANDOM_SEED = 42

@@ -1,4 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+SL_TIMEZONE = ZoneInfo("Asia/Colombo")
 
 
 def categorize_light(lux):
@@ -21,27 +24,44 @@ def categorize_light(lux):
 def categorize_turbidity(raw):
     if raw is None:
         return None
-    if raw >= 3000:
+    if raw <= 1:
         return "Crystal Clear"
-    elif raw >= 2500:
+    elif raw <= 5:
         return "Very Clear"
-    elif raw >= 2000:
-        return "Normal"
-    elif raw >= 1500:
+    elif raw <= 10:
+        return "Clear"
+    elif raw <= 25:
+        return "Slightly Cloudy"
+    elif raw <= 50:
         return "Cloudy"
+    elif raw <= 100:
+        return "Very Cloudy"
     else:
         return "Dirty"
 
 
-def transform_sensor_data(data):
+def categorize_tds(tds):
+    if tds is None:
+        return None
+    if tds < 150:
+        return "Very Low"
+    elif tds < 300:
+        return "Ideal"
+    elif tds < 500:
+        return "Slightly High"
+    elif tds < 800:
+        return "High"
+    else:
+        return "Very High"
 
-    data["ingestion_time"] = datetime.now(timezone.utc)
 
-    data["sampling_interval"] = 60
+def transform_sensor_data(data, sampling_interval_minutes):
+    data["ingestion_time"] = datetime.now(SL_TIMEZONE)
+    data["sampling_interval"] = sampling_interval_minutes
 
-    # Replace raw numerical values with categorical labels
+    # Replace numeric values with category labels
     data["light"] = categorize_light(data["light"])
     data["turbidity"] = categorize_turbidity(data["turbidity"])
+    data["tds"] = categorize_tds(data["tds"])
 
     return data
-
