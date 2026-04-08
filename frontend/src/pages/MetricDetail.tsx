@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, ShieldCheck } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import { getMetricData, generateData, metricLabels } from '@/data/dummyData';
+import { getPhAnalysis } from '@/api/client';
 import { useTanks } from '@/context/TanksContext';
 
 type TimeRange = '24h' | '7d' | '30d';
@@ -34,11 +35,45 @@ const MetricDetail = () => {
     info.status === 'warning' ? 'hsl(38, 92%, 50%)' :
     'hsl(152, 60%, 42%)';
 
-  const avgValue = +(chartData.reduce((s, p) => s + p.value, 0) / chartData.length).toFixed(2);
-  const maxValue = Math.max(...chartData.map(p => p.value));
-  const minValue = Math.min(...chartData.map(p => p.value));
-  const trendDir = chartData.length > 2 && chartData[chartData.length - 1].value > chartData[chartData.length - 2].value ? 'up' : 
-    chartData[chartData.length - 1].value < chartData[chartData.length - 2].value ? 'down' : 'flat';
+  // API-backed values
+  const [apiData, setApiData] = useState<any | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function fetchData() {
+      if (metricId === 'ph') {
+        try {
+          const resp = await getPhAnalysis(tank.id, range);
+          if (!mounted) return;
+          setApiData(resp);
+          setApiError(null);
+        } catch (e: any) {
+          if (!mounted) return;
+          setApiError(e.message || 'Failed to fetch');
+          setApiData(null);
+        }
+      }
+    }
+    fetchData();
+    return () => { mounted = false; };
+  }, [tank.id, metricId, range]);
+
+  // Prefer API chart points when available. Map backend keys to {time, value}.
+  const chartPoints = apiData?.chart_points
+    ? apiData.chart_points.map((p: any) => ({ time: p.timestamp ?? p.time, value: p.ph ?? p.value }))
+    : chartData.map(d => ({ time: d.time, value: d.value }));
+
+  const avgValue = apiData?.average ?? +(chartData.reduce((s, p) => s + p.value, 0) / chartData.length).toFixed(2);
+  const maxValue = apiData?.max ?? Math.max(...chartData.map(p => p.value));
+  const minValue = apiData?.min ?? Math.min(...chartData.map(p => p.value));
+
+  const trendDir = apiData?.trend
+    ? (apiData.trend === 'Rising' ? 'up' : apiData.trend === 'Falling' ? 'down' : 'flat')
+    : (
+      chartData.length > 2 && chartData[chartData.length - 1].value > chartData[chartData.length - 2].value ? 'up' : 
+      chartData[chartData.length - 1].value < chartData[chartData.length - 2].value ? 'down' : 'flat'
+    );
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -70,7 +105,7 @@ const MetricDetail = () => {
       {/* Large Chart */}
       <div className="rounded-xl border bg-card p-6 shadow-sm">
         <ResponsiveContainer width="100%" height={350}>
-          <LineChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+          <LineChart data={chartPoints} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis
               dataKey="time"
@@ -110,7 +145,7 @@ const MetricDetail = () => {
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <div className="rounded-xl border bg-card p-4 shadow-sm">
           <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Current</p>
-          <p className="mt-1 text-xl font-bold text-foreground">{info.value}{info.unit}</p>
+          <p className="mt-1 text-xl font-bold text-foreground">{(apiData?.current ?? info.value)}{info.unit}</p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-sm">
           <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Average</p>

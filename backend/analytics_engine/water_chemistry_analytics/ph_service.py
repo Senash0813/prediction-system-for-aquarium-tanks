@@ -1,6 +1,6 @@
 import pandas as pd
-from backend.analytics_engine.water_chemistry_analytics.mongo_loader import load_tank_data
-from backend.analytics_engine.water_chemistry_analytics.metric_analytics import analyze_metric
+from .mongo_loader import load_tank_data
+from .metric_analytics import analyze_metric
 
 
 def filter_last_hours(df: pd.DataFrame, hours: int) -> pd.DataFrame:
