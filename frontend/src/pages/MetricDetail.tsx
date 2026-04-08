@@ -61,7 +61,12 @@ const MetricDetail = () => {
 
   // Prefer API chart points when available. Map backend keys to {time, value}.
   const chartPoints = apiData?.chart_points
-    ? apiData.chart_points.map((p: any) => ({ time: p.timestamp ?? p.time, value: p.ph ?? p.value }))
+    ? apiData.chart_points.map((p: any) => ({
+        // prefer server-provided short label for axis, fall back to iso timestamp then generated time
+        time: p.label ?? p.timestamp_iso ?? p.timestamp ?? p.time,
+        value: p.ph ?? p.value,
+        _iso: p.timestamp_iso ?? p.timestamp,
+      }))
     : chartData.map(d => ({ time: d.time, value: d.value }));
 
   const avgValue = apiData?.average ?? +(chartData.reduce((s, p) => s + p.value, 0) / chartData.length).toFixed(2);

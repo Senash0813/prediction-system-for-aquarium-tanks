@@ -49,7 +49,21 @@ def get_ph_analysis(collection_name: str, range_type: str = "24h") -> dict:
 
     # Add chart-friendly points
     chart_df = filtered_df[["timestamp", "ph"]].copy()
-    chart_df["timestamp"] = chart_df["timestamp"].dt.strftime("%H:%M")
-    result["chart_points"] = chart_df.to_dict(orient="records")
+
+    # Keep an ISO timestamp for precise data and a human-friendly label for display.
+    # Label granularity depends on requested range to avoid clutter.
+    if range_type == "24h":
+        label_fmt = "%H:%M"
+    elif range_type == "7d":
+        label_fmt = "%b %d %H:%M"
+    else:  # 30d
+        label_fmt = "%b %d"
+
+    chart_df["timestamp_iso"] = chart_df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    chart_df["label"] = chart_df["timestamp"].dt.strftime(label_fmt)
+    # keep the ph value under a clear key
+    chart_df = chart_df.rename(columns={"ph": "ph"})
+
+    result["chart_points"] = chart_df[["timestamp_iso", "label", "ph"]].to_dict(orient="records")
 
     return result
