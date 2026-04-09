@@ -1,63 +1,23 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
-from datetime import datetime
-from pymongo import MongoClient
-from dotenv import load_dotenv
-import os
+from fastapi.middleware.cors import CORSMiddleware
 
-from cleaning import clean_sensor_data
-from transform import transform_sensor_data
+from api.chemistry_routes import router as chemistry_router
 
-load_dotenv()
+app = FastAPI(title="AquaGuard Backend")
 
-app = FastAPI()
+# CORS (important for frontend)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # later restrict
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# MongoDB connection using environment variable
-MONGODB_URI = os.getenv("MONGODB_URI")
-if not MONGODB_URI:
-    raise ValueError("MONGODB_URI not found in environment variables")
-
-# MongoDB connection
-client = MongoClient(MONGODB_URI)
-db = client["aqua_gaurd_db"]
-
-
-# Sensor data schema
-class SensorData(BaseModel):
-    tank_id: str
-    temperature: float
-    ph: float
-    turbidity: float
-    tds: float
-    light: float
-    timestamp: datetime
+# Include routes
+app.include_router(chemistry_router)
 
 
 @app.get("/")
 def root():
-    return {"message": "IoT pipeline running"}
-
-
-@app.post("/sensor-data")
-def receive_sensor_data(data: SensorData):
-
-    # Convert to dictionary
-    data_dict = data.model_dump()
-
-    # Select collection based on tank
-    collection = db[data.tank_id]
-
-    # Clean sensor data
-    data_dict = clean_sensor_data(data_dict, collection)
-
-    # Transform data
-    data_dict = transform_sensor_data(data_dict)
-
-    # Insert data
-    collection.insert_one(data_dict)
-
-    return {
-        "status": "stored",
-        "tank": data.tank_id
-    }
-
+    return {"message": "Backend running 🚀"}
