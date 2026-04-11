@@ -15,7 +15,7 @@ const char* ssid = "Dialog 4G 053";
 const char* password = "C271F9f3";
 
 // Backend REST API
-const char* backendUrl = "http://192.168.8.199:5000/api/sensor-data";
+const char* backendUrl = "http://aqua-gaurd-esp32.onrender.com/api/sensor-data";
 
 // ThingsBoard MQTT
 const char* tbServer = "thingsboard.cloud";
