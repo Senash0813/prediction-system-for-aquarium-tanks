@@ -8,6 +8,7 @@ interface TankDetails {
   turbidityMin: string; turbidityMax: string;
   lightMin: string; lightMax: string;
   tdsMin: string; tdsMax: string;
+  macAddress: string;
 }
 
 interface TanksContextType {
@@ -54,6 +55,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
 
     saveTankConfig({
       tank_id: name,
+      mac_address: details.macAddress,
       safe_ranges: {
         temperature: { min: tempMin, max: tempMax },
         ph:          { min: phMin,   max: phMax   },

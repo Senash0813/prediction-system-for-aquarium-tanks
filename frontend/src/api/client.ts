@@ -15,6 +15,7 @@ export function mapTankId(frontendId: string) {
 
 export interface TankConfigPayload {
   tank_id: string;
+  mac_address: string;
   safe_ranges: {
     temperature: { min: number; max: number };
     ph: { min: number; max: number };
