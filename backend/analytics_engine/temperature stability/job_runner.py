@@ -6,7 +6,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from settings import SCHEDULER_INTERVAL_SECONDS
-from mongo_client import fetch_recent_readings, get_all_tank_ids, close_connection, save_temperature_insight
+from mongo_client import fetch_recent_readings, get_all_tank_ids, close_connection, save_temperature_insight, fetch_tank_config
 from insight_1_temperature import generate_insight
 
 # ---------------------------------------------------------------------------
@@ -67,8 +67,9 @@ def _process_tank(tank_id: str):
             logger.warning(f"[{tank_id}] No readings found. Skipping.")
             return
 
+        tank_config = fetch_tank_config(tank_id)
         logger.info(f"[{tank_id}] Running temperature insight on {len(readings)} reading(s)...")
-        insight = generate_insight(tank_id, readings)
+        insight = generate_insight(tank_id, readings, tank_config["safe_min"], tank_config["safe_max"])
 
         save_temperature_insight(tank_id, insight)
         _log_insight(tank_id, insight)

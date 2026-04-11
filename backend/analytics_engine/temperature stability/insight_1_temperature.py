@@ -2,8 +2,6 @@
 
 from datetime import datetime, timezone
 from settings import (
-    TEMPERATURE_SAFE_MIN,
-    TEMPERATURE_SAFE_MAX,
     TEMP_CHANGE_RATE_THRESHOLD,
     PREDICTION_ALERT_WINDOW_MINUTES,
     TREND_WINDOW_SIZE,
@@ -115,7 +113,7 @@ def calculate_trend(readings: list[dict]) -> dict:
         direction = "rising"
     else:
         direction = "stable"
-
+ 
     return {
         "rate_per_minute": round(rate, 4),
         "total_change": round(total_change, 3),
@@ -129,7 +127,12 @@ def calculate_trend(readings: list[dict]) -> dict:
 # SECTION 3 — Prediction Engine
 # ============================================================
 
-def predict_time_to_unsafe(current_temp: float, rate_per_minute: float) -> dict:
+def predict_time_to_unsafe(
+    current_temp: float,
+    rate_per_minute: float,
+    safe_min: float,
+    safe_max: float,
+) -> dict:
     """
     Given the current temperature and rate of change, predicts
     how many minutes until the temperature exits the safe range.
@@ -137,6 +140,8 @@ def predict_time_to_unsafe(current_temp: float, rate_per_minute: float) -> dict:
     Args:
         current_temp    : latest temperature reading (°C)
         rate_per_minute : °C change per minute from trend analysis
+        safe_min        : tank-specific minimum safe temperature (°C)
+        safe_max        : tank-specific maximum safe temperature (°C)
 
     Returns a dict with:
         - is_already_unsafe     : True if current temp is already outside range
@@ -145,14 +150,14 @@ def predict_time_to_unsafe(current_temp: float, rate_per_minute: float) -> dict:
         - current_temp          : passed through for convenience
     """
     # Already outside safe range?
-    if current_temp < TEMPERATURE_SAFE_MIN:
+    if current_temp < safe_min:
         return {
             "is_already_unsafe": True,
             "predicted_breach_min": 0,
             "breach_direction": "too_cold",
             "current_temp": current_temp,
         }
-    if current_temp > TEMPERATURE_SAFE_MAX:
+    if current_temp > safe_max:
         return {
             "is_already_unsafe": True,
             "predicted_breach_min": 0,
@@ -169,9 +174,9 @@ def predict_time_to_unsafe(current_temp: float, rate_per_minute: float) -> dict:
             "current_temp": current_temp,
         }
 
-    # Cooling → predict time to hit TEMPERATURE_SAFE_MIN
+    # Cooling → predict time to hit safe_min
     if rate_per_minute < 0:
-        degrees_to_breach = current_temp - TEMPERATURE_SAFE_MIN
+        degrees_to_breach = current_temp - safe_min
         minutes = degrees_to_breach / abs(rate_per_minute)
         return {
             "is_already_unsafe": False,
@@ -180,9 +185,9 @@ def predict_time_to_unsafe(current_temp: float, rate_per_minute: float) -> dict:
             "current_temp": current_temp,
         }
 
-    # Heating → predict time to hit TEMPERATURE_SAFE_MAX
+    # Heating → predict time to hit safe_max
     if rate_per_minute > 0:
-        degrees_to_breach = TEMPERATURE_SAFE_MAX - current_temp
+        degrees_to_breach = safe_max - current_temp
         minutes = degrees_to_breach / rate_per_minute
         return {
             "is_already_unsafe": False,
@@ -261,7 +266,7 @@ def diagnose_cause(trend: dict, light_assessment: dict) -> str:
     return "Unable to determine cause."
 
 
-def generate_insight(tank_id: str, readings: list[dict]) -> dict:
+def generate_insight(tank_id: str, readings: list[dict], safe_min: float, safe_max: float) -> dict:
     """
     Master function — orchestrates all sections and produces
     the final structured insight for Insight 1.
@@ -269,6 +274,8 @@ def generate_insight(tank_id: str, readings: list[dict]) -> dict:
     Args:
         tank_id  : e.g. 'tank_1'
         readings : raw readings list from mongo_client.fetch_recent_readings()
+        safe_min : tank-specific minimum safe temperature (°C) from tank_config
+        safe_max : tank-specific maximum safe temperature (°C) from tank_config
 
     Returns a dict with:
         - tank_id
@@ -300,7 +307,7 @@ def generate_insight(tank_id: str, readings: list[dict]) -> dict:
     light_readings = [r["light"] for r in readings]
     light_assessment = assess_light_window(light_readings)
     current_temp = readings[-1]["temperature"]
-    prediction = predict_time_to_unsafe(current_temp, trend["rate_per_minute"])
+    prediction = predict_time_to_unsafe(current_temp, trend["rate_per_minute"], safe_min, safe_max)
     cause = diagnose_cause(trend, light_assessment)
 
     # --- Determine status ---

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.chemistry_routes import router as chemistry_router
+from api.tank_config_routes import router as tank_config_router
 
 app = FastAPI(title="AquaGuard Backend")
 
@@ -16,6 +17,7 @@ app.add_middleware(
 
 # Include routes
 app.include_router(chemistry_router)
+app.include_router(tank_config_router)
 
 
 @app.get("/")

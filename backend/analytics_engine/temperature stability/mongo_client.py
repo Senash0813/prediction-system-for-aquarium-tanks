@@ -3,7 +3,7 @@
 from datetime import datetime
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.errors import ConnectionFailure, OperationFailure
-from settings import MONGO_URI, MONGO_DB_NAME, INSIGHTS_DB_NAME, INSIGHTS_TTL_SECONDS, get_tank_collection_name, TREND_WINDOW_SIZE
+from settings import MONGO_URI, MONGO_DB_NAME, INSIGHTS_DB_NAME, INSIGHTS_TTL_SECONDS, get_tank_collection_name, TREND_WINDOW_SIZE, TEMPERATURE_SAFE_MIN, TEMPERATURE_SAFE_MAX
 
 
 _client = None  # Module-level singleton — one connection reused across all calls
@@ -58,6 +58,36 @@ def fetch_recent_readings(tank_id: str, limit: int = TREND_WINDOW_SIZE) -> list[
         raise RuntimeError(f"[mongo_client] Query failed for {tank_id}: {e}")
 
 
+def fetch_tank_config(tank_id: str) -> dict:
+    """
+    Fetches the safe temperature range for a given tank from tank_config.
+
+    Returns a dict with:
+        - safe_min : minimum safe temperature (°C)
+        - safe_max : maximum safe temperature (°C)
+
+    Falls back to settings defaults if no config document is found for the tank.
+    """
+    try:
+        collection = get_db()["tank_config"]
+        config = collection.find_one({"tank_id": tank_id}, {"_id": 0, "safe_ranges.temperature": 1})
+
+        if config:
+            temp_range = config.get("safe_ranges", {}).get("temperature", {})
+            safe_min = temp_range.get("min", TEMPERATURE_SAFE_MIN)
+            safe_max = temp_range.get("max", TEMPERATURE_SAFE_MAX)
+        else:
+            safe_min = TEMPERATURE_SAFE_MIN
+            safe_max = TEMPERATURE_SAFE_MAX
+
+        return {"safe_min": float(safe_min), "safe_max": float(safe_max)}
+
+    except ConnectionFailure as e:
+        raise RuntimeError(f"[mongo_client] Could not connect to MongoDB: {e}")
+    except OperationFailure as e:
+        raise RuntimeError(f"[mongo_client] Failed to fetch tank config for {tank_id}: {e}")
+
+
 def get_all_tank_ids() -> list[str]:
     """
     Returns all tank collection names in the database.
@@ -66,7 +96,7 @@ def get_all_tank_ids() -> list[str]:
     try:
         all_collections = get_db().list_collection_names()
         # Filter to only tank collections (in case other collections exist)
-        return [name for name in all_collections if name.startswith("tank_")]
+        return [name for name in all_collections if name.startswith("tank_") and name != "tank_config"]
     except Exception as e:
         raise RuntimeError(f"[mongo_client] Could not list collections: {e}")
 

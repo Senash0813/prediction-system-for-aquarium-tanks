@@ -13,6 +13,29 @@ export function mapTankId(frontendId: string) {
   return TANK_ID_MAP[frontendId] ?? frontendId;
 }
 
+export interface TankConfigPayload {
+  tank_id: string;
+  safe_ranges: {
+    temperature: { min: number; max: number };
+    ph: { min: number; max: number };
+    turbidity: { min: number; max: number };
+    light: { min: number; max: number };
+    tds: { min: number; max: number };
+  };
+}
+
+export async function saveTankConfig(payload: TankConfigPayload): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/tank-config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to save tank config: ${text}`);
+  }
+}
+
 export async function getPhAnalysis(tankFrontendId: string, range: string = '24h') {
   const collectionName = mapTankId(tankFrontendId);
   const url = `${API_BASE}/api/tank/${encodeURIComponent(collectionName)}/ph-analysis?range=${encodeURIComponent(range)}`;
