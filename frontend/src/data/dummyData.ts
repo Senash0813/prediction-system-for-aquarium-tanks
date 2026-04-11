@@ -11,6 +11,8 @@ export interface TankMetric {
   unit: string;
   trend: string;
   label: string;
+  safeMin?: number;
+  safeMax?: number;
 }
 
 export interface Notification {

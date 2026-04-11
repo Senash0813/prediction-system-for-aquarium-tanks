@@ -15,23 +15,61 @@ interface AddTankDialogProps {
 
 const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
   const [name, setName] = useState('');
-  const [temperature, setTemperature] = useState('');
-  const [ph, setPh] = useState('');
-  const [turbidity, setTurbidity] = useState('');
-  const [light, setLight] = useState('');
-  const [tds, setTds] = useState('');
+  const [temperatureMin, setTemperatureMin] = useState('');
+  const [temperatureMax, setTemperatureMax] = useState('');
+  const [phMin, setPhMin] = useState('');
+  const [phMax, setPhMax] = useState('');
+  const [turbidityMin, setTurbidityMin] = useState('');
+  const [turbidityMax, setTurbidityMax] = useState('');
+  const [lightMin, setLightMin] = useState('');
+  const [lightMax, setLightMax] = useState('');
+  const [tdsMin, setTdsMin] = useState('');
+  const [tdsMax, setTdsMax] = useState('');
   const { addTank, tanks } = useTanks();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim();
-    const trimmedTemperature = temperature.trim();
-    const trimmedPh = ph.trim();
-    const trimmedTurbidity = turbidity.trim();
-    const trimmedLight = light.trim();
-    const trimmedTds = tds.trim();
 
-    if (!trimmedName || !trimmedTemperature || !trimmedPh || !trimmedTurbidity || !trimmedLight || !trimmedTds) {
+    if (
+      !trimmedName ||
+      !temperatureMin || !temperatureMax ||
+      !phMin || !phMax ||
+      !turbidityMin || !turbidityMax ||
+      !lightMin || !lightMax ||
+      !tdsMin || !tdsMax
+    ) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    const numericFields = [
+      temperatureMin, temperatureMax, phMin, phMax,
+      turbidityMin, turbidityMax, lightMin, lightMax, tdsMin, tdsMax,
+    ];
+    if (numericFields.some(v => isNaN(parseFloat(v)))) {
+      toast.error('All parameter values must be valid numbers');
+      return;
+    }
+
+    if (parseFloat(temperatureMin) >= parseFloat(temperatureMax)) {
+      toast.error('Temperature: Min must be less than Max');
+      return;
+    }
+    if (parseFloat(phMin) >= parseFloat(phMax)) {
+      toast.error('pH: Min must be less than Max');
+      return;
+    }
+    if (parseFloat(turbidityMin) >= parseFloat(turbidityMax)) {
+      toast.error('Turbidity: Min must be less than Max');
+      return;
+    }
+    if (parseFloat(lightMin) >= parseFloat(lightMax)) {
+      toast.error('Light: Min must be less than Max');
+      return;
+    }
+    if (parseFloat(tdsMin) >= parseFloat(tdsMax)) {
+      toast.error('TDS: Min must be less than Max');
       return;
     }
 
@@ -41,29 +79,29 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
     }
 
     addTank(trimmedName, {
-      temperature: trimmedTemperature,
-      ph: trimmedPh,
-      turbidity: trimmedTurbidity,
-      light: trimmedLight,
-      tds: trimmedTds,
+      temperatureMin, temperatureMax,
+      phMin, phMax,
+      turbidityMin, turbidityMax,
+      lightMin, lightMax,
+      tdsMin, tdsMax,
     });
 
     toast.success(`${trimmedName} has been added`);
     setName('');
-    setTemperature('');
-    setPh('');
-    setTurbidity('');
-    setLight('');
-    setTds('');
+    setTemperatureMin(''); setTemperatureMax('');
+    setPhMin(''); setPhMax('');
+    setTurbidityMin(''); setTurbidityMax('');
+    setLightMin(''); setLightMax('');
+    setTdsMin(''); setTdsMax('');
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add New Tank</DialogTitle>
-          <DialogDescription>Give your new tank a name to start monitoring.</DialogDescription>
+          <DialogDescription>Set the safe parameter ranges for your new tank.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -77,54 +115,79 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
             />
           </div>
 
+          {/* Temperature */}
           <div className="space-y-2">
-            <Label htmlFor="tank-temperature">Safe Temperature</Label>
-            <Input
-              id="tank-temperature"
-              placeholder="e.g. 25°C"
-              value={temperature}
-              onChange={e => setTemperature(e.target.value)}
-            />
+            <Label>Temperature (°C)</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="temp-min" className="text-xs text-muted-foreground mb-1 block">Min</Label>
+                <Input id="temp-min"placeholder="e.g. 22" value={temperatureMin} onChange={e => setTemperatureMin(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="temp-max" className="text-xs text-muted-foreground mb-1 block">Max</Label>
+                <Input id="temp-max"placeholder="e.g. 28" value={temperatureMax} onChange={e => setTemperatureMax(e.target.value)} />
+              </div>
+            </div>
           </div>
 
+          {/* pH */}
           <div className="space-y-2">
-            <Label htmlFor="tank-ph">Safe pH</Label>
-            <Input
-              id="tank-ph"
-              placeholder="e.g. 7.5"
-              value={ph}
-              onChange={e => setPh(e.target.value)}
-            />
+            <Label>pH Level</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="ph-min" className="text-xs text-muted-foreground mb-1 block">Min</Label>
+                <Input id="ph-min"placeholder="e.g. 6.5" value={phMin} onChange={e => setPhMin(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="ph-max" className="text-xs text-muted-foreground mb-1 block">Max</Label>
+                <Input id="ph-max"placeholder="e.g. 7.5" value={phMax} onChange={e => setPhMax(e.target.value)} />
+              </div>
+            </div>
           </div>
 
+          {/* Turbidity */}
           <div className="space-y-2">
-            <Label htmlFor="tank-turbidity">Safe Turbidity</Label>
-            <Input
-              id="tank-turbidity"
-              placeholder="e.g. 5 NTU"
-              value={turbidity}
-              onChange={e => setTurbidity(e.target.value)}
-            />
+            <Label>Turbidity (NTU)</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="turb-min" className="text-xs text-muted-foreground mb-1 block">Min</Label>
+                <Input id="turb-min"placeholder="e.g. 0" value={turbidityMin} onChange={e => setTurbidityMin(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="turb-max" className="text-xs text-muted-foreground mb-1 block">Max</Label>
+                <Input id="turb-max"placeholder="e.g. 10" value={turbidityMax} onChange={e => setTurbidityMax(e.target.value)} />
+              </div>
+            </div>
           </div>
 
+          {/* Light */}
           <div className="space-y-2">
-            <Label htmlFor="tank-light">Safe Light</Label>
-            <Input
-              id="tank-light"
-              placeholder="e.g. 300 lux"
-              value={light}
-              onChange={e => setLight(e.target.value)}
-            />
+            <Label>Light (lux)</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="light-min" className="text-xs text-muted-foreground mb-1 block">Min</Label>
+                <Input id="light-min"placeholder="e.g. 100" value={lightMin} onChange={e => setLightMin(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="light-max" className="text-xs text-muted-foreground mb-1 block">Max</Label>
+                <Input id="light-max"placeholder="e.g. 500" value={lightMax} onChange={e => setLightMax(e.target.value)} />
+              </div>
+            </div>
           </div>
 
+          {/* TDS */}
           <div className="space-y-2">
-            <Label htmlFor="tank-tds">Safe TDS</Label>
-            <Input
-              id="tank-tds"
-              placeholder="e.g. 500 ppm"
-              value={tds}
-              onChange={e => setTds(e.target.value)}
-            />
+            <Label>TDS (ppm)</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="tds-min" className="text-xs text-muted-foreground mb-1 block">Min</Label>
+                <Input id="tds-min"placeholder="e.g. 200" value={tdsMin} onChange={e => setTdsMin(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="tds-max" className="text-xs text-muted-foreground mb-1 block">Max</Label>
+                <Input id="tds-max"placeholder="e.g. 600" value={tdsMax} onChange={e => setTdsMax(e.target.value)} />
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
