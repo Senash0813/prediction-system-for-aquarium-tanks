@@ -25,6 +25,7 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
   const [lightMax, setLightMax] = useState('');
   const [tdsMin, setTdsMin] = useState('');
   const [tdsMax, setTdsMax] = useState('');
+  const [macAddress, setMacAddress] = useState('');
   const { addTank, tanks } = useTanks();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -33,6 +34,7 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
 
     if (
       !trimmedName ||
+      !macAddress.trim() ||
       !temperatureMin || !temperatureMax ||
       !phMin || !phMax ||
       !turbidityMin || !turbidityMax ||
@@ -73,6 +75,12 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
       return;
     }
 
+    const macRegex = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+    if (!macRegex.test(macAddress.trim())) {
+      toast.error('Please enter a valid MAC address (e.g. A4:CF:12:78:3B:01)');
+      return;
+    }
+
     if (tanks.some(t => t.name.toLowerCase() === trimmedName.toLowerCase())) {
       toast.error('A tank with this name already exists');
       return;
@@ -84,6 +92,7 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
       turbidityMin, turbidityMax,
       lightMin, lightMax,
       tdsMin, tdsMax,
+      macAddress: macAddress.trim().toUpperCase(),
     });
 
     toast.success(`${trimmedName} has been added`);
@@ -93,6 +102,7 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
     setTurbidityMin(''); setTurbidityMax('');
     setLightMin(''); setLightMax('');
     setTdsMin(''); setTdsMax('');
+    setMacAddress('');
     onOpenChange(false);
   };
 
@@ -112,6 +122,17 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
               value={name}
               onChange={e => setName(e.target.value)}
               autoFocus
+            />
+          </div>
+
+          {/* MAC Address */}
+          <div className="space-y-2">
+            <Label htmlFor="mac-address">Device MAC Address</Label>
+            <Input
+              id="mac-address"
+              placeholder="e.g. A4:CF:12:78:3B:01"
+              value={macAddress}
+              onChange={e => setMacAddress(e.target.value)}
             />
           </div>
 
