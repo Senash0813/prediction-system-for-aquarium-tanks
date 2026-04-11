@@ -3,7 +3,7 @@ export const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://127
 // Map frontend tank IDs to backend collection names
 const TANK_ID_MAP: Record<string, string> = {
   // Map frontend Tank A to the backend test collection
-  'tank-a': 'tank_1_test',
+  'tank-a': 'tank_1',
   'tank-b': 'tank_2',
   'tank-c': 'tank_3',
   'tank-d': 'tank_4',
