@@ -11,6 +11,9 @@ from api.tanks_routes import router as tanks_router
 from analytics_engine.temperature_stability.job_runner import start_background_scheduler
 from analytics_engine.temperature_stability.mongo_client import close_connection
 
+from analytics_engine.filter_health.generate_filter_insights import start_periodic_filter_health_insights
+from api.filter_health_routes import router as filter_health_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,7 +49,12 @@ app.include_router(chat_router)
 app.include_router(chemistry_router)
 app.include_router(tank_config_router)
 app.include_router(tanks_router)
+app.include_router(filter_health_router)
 
+@app.on_event("startup")
+def startup_tasks() -> None:
+    # Run filter-health insight generation every 30 minutes after server starts.
+    start_periodic_filter_health_insights(interval_minutes=30.0)
 
 @app.get("/")
 def root():
