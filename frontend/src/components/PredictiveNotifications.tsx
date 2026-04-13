@@ -42,9 +42,16 @@ const NotificationCard = ({ notification }: { notification: Notification }) => {
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-          <p className={`text-sm leading-relaxed text-card-foreground ${lang === 'si' ? 'font-sinhala' : ''}`}>
-            {lang === 'en' ? notification.en : notification.si}
-          </p>
+          <div className="flex flex-col gap-1">
+            {notification.kind && (
+              <span className="w-fit rounded-md border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {notification.kind}
+              </span>
+            )}
+            <p className={`text-sm leading-relaxed text-card-foreground ${lang === 'si' ? 'font-sinhala' : ''}`}>
+              {lang === 'en' ? notification.en : notification.si}
+            </p>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <button

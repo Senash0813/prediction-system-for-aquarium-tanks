@@ -21,6 +21,7 @@ export interface Notification {
   si: string;
   severity: TankStatus;
   timestamp: string;
+  kind?: string;
 }
 
 export interface Tank {

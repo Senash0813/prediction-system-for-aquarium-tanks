@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, ShieldCheck } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import { getMetricData, generateData, metricLabels } from '@/data/dummyData';
-import { getPhAnalysis } from '@/api/client';
+import { getPhAnalysis, getRiskHistory, getReadingsHistory } from '@/api/client';
 import { useTanks } from '@/context/TanksContext';
 
 type TimeRange = '24h' | '7d' | '30d';
@@ -35,6 +35,51 @@ const MetricDetail = () => {
     info.status === 'warning' ? 'hsl(38, 92%, 50%)' :
     'hsl(152, 60%, 42%)';
 
+  const isIsoLike = (v: any) => {
+    if (typeof v !== 'string') return false;
+    return /^\d{4}-\d{2}-\d{2}T/.test(v) || v.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(v);
+  };
+
+  const formatAxisTimeTick = (ts: any) => {
+    if (ts == null) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return String(ts);
+    const useUtc = isIsoLike(ts);
+
+    if (range === '24h') {
+      return d.toLocaleString(undefined, {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        ...(useUtc ? { timeZone: 'UTC' as const } : {}),
+      });
+    }
+
+    // For 7d/30d, keep ticks short (date only) to avoid label collisions.
+    return d.toLocaleDateString(undefined, {
+      month: '2-digit',
+      day: '2-digit',
+      ...(useUtc ? { timeZone: 'UTC' as const } : {}),
+    });
+  };
+
+  const formatAxisTimeTooltip = (ts: any) => {
+    if (ts == null) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return String(ts);
+    const useUtc = isIsoLike(ts);
+    return d.toLocaleString(undefined, {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(useUtc ? { timeZone: 'UTC' as const } : {}),
+    });
+  };
+
+  const formatAxisValue = (v: any) => (info.unit ? `${v}${info.unit}` : String(v));
+
   // API-backed values
   const [apiData, setApiData] = useState<any | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -42,17 +87,54 @@ const MetricDetail = () => {
   useEffect(() => {
     let mounted = true;
     async function fetchData() {
-      if (metricId === 'ph') {
-        try {
+      try {
+        // pH metric uses water chemistry API
+        if (metricId === 'ph') {
+          // DB tanks (tank_1, tank_2, ...) read pH directly from readings history
+          if (/^tank_\d+$/.test(tank.id)) {
+            const limit = range === '30d' ? 50000 : range === '7d' ? 20000 : 5000;
+            const resp = await getReadingsHistory(tank.id, range, { limit });
+            if (!mounted) return;
+            setApiData(resp);
+            setApiError(null);
+            return;
+          }
+
           const resp = await getPhAnalysis(tank.id, range);
           if (!mounted) return;
           setApiData(resp);
           setApiError(null);
-        } catch (e: any) {
-          if (!mounted) return;
-          setApiError(e.message || 'Failed to fetch');
-          setApiData(null);
+          return;
         }
+
+        // Stress metric for DB-discovered tanks (tank_1, tank_2, ...) uses generated insights risk history
+        if (metricId === 'stress' && /^tank_\d+$/.test(tank.id)) {
+          const limit = range === '30d' ? 50000 : range === '7d' ? 20000 : 5000;
+          const resp = await getRiskHistory(tank.id, range, { limit });
+          if (!mounted) return;
+          setApiData(resp);
+          setApiError(null);
+          return;
+        }
+
+        // Temperature/Turbidity for DB tanks uses readings history from aqua_gaurd_db
+        if ((metricId === 'temperature' || metricId === 'turbidity') && /^tank_\d+$/.test(tank.id)) {
+          const limit = range === '30d' ? 50000 : range === '7d' ? 20000 : 5000;
+          const resp = await getReadingsHistory(tank.id, range, { limit });
+          if (!mounted) return;
+          setApiData(resp);
+          setApiError(null);
+          return;
+        }
+
+        // Other metrics fall back to dummy data
+        if (!mounted) return;
+        setApiData(null);
+        setApiError(null);
+      } catch (e: any) {
+        if (!mounted) return;
+        setApiError(e.message || 'Failed to fetch');
+        setApiData(null);
       }
     }
     fetchData();
@@ -60,24 +142,54 @@ const MetricDetail = () => {
   }, [tank.id, metricId, range]);
 
   // Prefer API chart points when available. Map backend keys to {time, value}.
-  const chartPoints = apiData?.chart_points
-    ? apiData.chart_points.map((p: any) => ({
-        // prefer server-provided short label for axis, fall back to iso timestamp then generated time
-        time: p.label ?? p.timestamp_iso ?? p.timestamp ?? p.time,
+  const chartPoints = (() => {
+    // pH analysis response
+    if (apiData?.chart_points) {
+      return apiData.chart_points.map((p: any) => ({
+        time: p.timestamp_iso ?? p.timestamp ?? p.label ?? p.time,
         value: p.ph ?? p.value,
         _iso: p.timestamp_iso ?? p.timestamp,
-      }))
-    : chartData.map(d => ({ time: d.time, value: d.value }));
+      }));
+    }
 
-  const avgValue = apiData?.average ?? +(chartData.reduce((s, p) => s + p.value, 0) / chartData.length).toFixed(2);
-  const maxValue = apiData?.max ?? Math.max(...chartData.map(p => p.value));
-  const minValue = apiData?.min ?? Math.min(...chartData.map(p => p.value));
+    // Stress risk history response
+    if (metricId === 'stress' && Array.isArray(apiData?.points)) {
+      return apiData.points.map((p: any) => {
+        return {
+          time: String(p.timestamp),
+          value: typeof p.value === 'number' ? p.value : Number(p.value),
+          _iso: p.timestamp,
+        };
+      }).filter((p: any) => !isNaN(p.value));
+    }
+
+    // Readings history response (temperature/turbidity/ph)
+    if ((metricId === 'temperature' || metricId === 'turbidity' || metricId === 'ph') && Array.isArray(apiData?.points)) {
+      const key = metricId;
+      return apiData.points.map((p: any) => {
+        const time = String(p.timestamp);
+        const raw = key === 'turbidity' ? p?.turbidity : key === 'temperature' ? p?.temperature : p?.ph;
+        const value = typeof raw === 'number' ? raw : Number(raw);
+        return { time, value, _iso: p.timestamp };
+      }).filter((p: any) => !isNaN(p.value));
+    }
+
+    return chartData.map(d => ({ time: d.time, value: d.value }));
+  })();
+
+  const values = chartPoints.map(p => p.value);
+  const avgValue = values.length
+    ? +(values.reduce((s, v) => s + v, 0) / values.length).toFixed(2)
+    : +(chartData.reduce((s, p) => s + p.value, 0) / chartData.length).toFixed(2);
+  const maxValue = values.length ? Math.max(...values) : Math.max(...chartData.map(p => p.value));
+  const minValue = values.length ? Math.min(...values) : Math.min(...chartData.map(p => p.value));
+  const currentValue = values.length ? values[values.length - 1] : (apiData?.current ?? info.value);
 
   const trendDir = apiData?.trend
     ? (apiData.trend === 'Rising' ? 'up' : apiData.trend === 'Falling' ? 'down' : 'flat')
     : (
-      chartData.length > 2 && chartData[chartData.length - 1].value > chartData[chartData.length - 2].value ? 'up' : 
-      chartData[chartData.length - 1].value < chartData[chartData.length - 2].value ? 'down' : 'flat'
+      values.length > 1 && values[values.length - 1] > values[values.length - 2] ? 'up' :
+      values.length > 1 && values[values.length - 1] < values[values.length - 2] ? 'down' : 'flat'
     );
 
   return (
@@ -116,11 +228,14 @@ const MetricDetail = () => {
               dataKey="time"
               tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
               interval="preserveStartEnd"
+              tickFormatter={(v) => formatAxisTimeTick(v)}
+              minTickGap={24}
               tickLine={false}
               axisLine={false}
             />
             <YAxis
               tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+              tickFormatter={formatAxisValue}
               tickLine={false}
               axisLine={false}
             />
@@ -132,6 +247,7 @@ const MetricDetail = () => {
                 borderRadius: '8px',
                 fontSize: '12px',
               }}
+              labelFormatter={(label: any) => formatAxisTimeTooltip(label)}
               formatter={(value: number) => [`${value}${info.unit}`, label]}
             />
             <Line
@@ -150,7 +266,7 @@ const MetricDetail = () => {
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <div className="rounded-xl border bg-card p-4 shadow-sm">
           <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Current</p>
-          <p className="mt-1 text-xl font-bold text-foreground">{(apiData?.current ?? info.value)}{info.unit}</p>
+          <p className="mt-1 text-xl font-bold text-foreground">{currentValue}{info.unit}</p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-sm">
           <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Average</p>
