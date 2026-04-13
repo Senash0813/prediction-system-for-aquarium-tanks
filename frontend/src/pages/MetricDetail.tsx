@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { getMetricData, generateData, metricLabels } from '@/data/dummyData';
 import { getPhAnalysis, getRiskHistory, getReadingsHistory } from '@/api/client';
 import { useTanks } from '@/context/TanksContext';
+import { useChatContext } from '@/components/chatbot/ChatContext';
 
 type TimeRange = '24h' | '7d' | '30d';
 
@@ -12,6 +13,7 @@ const MetricDetail = () => {
   const { tankId, metricId } = useParams<{ tankId: string; metricId: string }>();
   const [range, setRange] = useState<TimeRange>('24h');
   const { tanks } = useTanks();
+  const { setPageContext } = useChatContext();
 
   const tank = tanks.find(t => t.id === (tankId || ''));
   if (!tank || !metricId) {
@@ -191,6 +193,26 @@ const MetricDetail = () => {
       values.length > 1 && values[values.length - 1] > values[values.length - 2] ? 'up' :
       values.length > 1 && values[values.length - 1] < values[values.length - 2] ? 'down' : 'flat'
     );
+
+  useEffect(() => {
+    setPageContext({
+      page: 'metric_detail',
+      tankId: tank.id,
+      tankName: tank.name,
+      metricDetail: {
+        metric: label,
+        current: currentValue,
+        average: avgValue,
+        min: minValue,
+        max: maxValue,
+        trend: trendDir === 'up' ? 'Rising' : trendDir === 'down' ? 'Falling' : 'Stable',
+        status: info.status,
+        unit: info.unit ?? '',
+        timeRange: range,
+      },
+    });
+    return () => setPageContext(null);
+  }, [tank.id, metricId, range, currentValue, avgValue, minValue, maxValue, trendDir, info.status, setPageContext]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">

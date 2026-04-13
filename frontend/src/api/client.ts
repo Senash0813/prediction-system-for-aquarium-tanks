@@ -111,6 +111,24 @@ export async function getRiskHistory(
   return res.json();
 }
 
+export async function sendChatMessage(
+  message: string,
+  context: object | null,
+  history: Array<{ role: string; content: string }>
+): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, context, history }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Chat API error ${res.status}: ${text}`);
+  }
+  const data = await res.json();
+  return data.reply as string;
+}
+
 export async function getReadingsHistory(
   collectionName: string,
   range: '24h' | '7d' | '30d' = '24h',
