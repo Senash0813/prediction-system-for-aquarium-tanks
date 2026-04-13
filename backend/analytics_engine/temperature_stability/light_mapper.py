@@ -1,6 +1,6 @@
 # utils/light_mapper.py
 
-from settings import LIGHT_STABLE_CATEGORIES, LIGHT_SHIFT_CATEGORIES
+from .settings import LIGHT_STABLE_CATEGORIES, LIGHT_SHIFT_CATEGORIES
 
 
 # Maps each category to a numeric stability score used in diagnosis logic.

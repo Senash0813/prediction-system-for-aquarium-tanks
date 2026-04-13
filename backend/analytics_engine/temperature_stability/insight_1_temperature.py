@@ -1,12 +1,12 @@
 # insights/insight_1_temperature.py
 
 from datetime import datetime, timezone
-from settings import (
+from .settings import (
     TEMP_CHANGE_RATE_THRESHOLD,
     PREDICTION_ALERT_WINDOW_MINUTES,
     TREND_WINDOW_SIZE,
 )
-from light_mapper import assess_light_window
+from .light_mapper import assess_light_window
 
 
 # ============================================================
