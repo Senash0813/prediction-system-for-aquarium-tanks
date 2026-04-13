@@ -46,3 +46,84 @@ export async function getPhAnalysis(tankFrontendId: string, range: string = '24h
   }
   return res.json();
 }
+
+export async function getTankCollections(): Promise<{ tanks: string[] }> {
+  const res = await fetch(`${API_BASE}/api/tanks`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch tanks: ${text}`);
+  }
+  return res.json();
+}
+
+export async function getLatestReading(collectionName: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/tanks/${encodeURIComponent(collectionName)}/latest`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch latest reading for ${collectionName}: ${text}`);
+  }
+  return res.json();
+}
+
+export async function getLatestInsight(collectionName: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/tanks/${encodeURIComponent(collectionName)}/latest-insight`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch latest insight for ${collectionName}: ${text}`);
+  }
+  return res.json();
+}
+
+export async function getLatestRiskInsight(collectionName: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/tanks/${encodeURIComponent(collectionName)}/latest-risk`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch latest risk insight for ${collectionName}: ${text}`);
+  }
+  return res.json();
+}
+
+export async function getLatestInsightsByType(collectionName: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/tanks/${encodeURIComponent(collectionName)}/latest-insights-by-type`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch latest insights by type for ${collectionName}: ${text}`);
+  }
+  return res.json();
+}
+
+export async function getRiskHistory(
+  collectionName: string,
+  range: '24h' | '7d' | '30d' = '24h',
+  opts?: { limit?: number }
+) {
+  const params = new URLSearchParams({ range });
+  if (opts?.limit != null) params.set('limit', String(opts.limit));
+
+  const res = await fetch(
+    `${API_BASE}/api/tanks/${encodeURIComponent(collectionName)}/risk-history?${params.toString()}`
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch risk history for ${collectionName}: ${text}`);
+  }
+  return res.json();
+}
+
+export async function getReadingsHistory(
+  collectionName: string,
+  range: '24h' | '7d' | '30d' = '24h',
+  opts?: { limit?: number }
+) {
+  const params = new URLSearchParams({ range });
+  if (opts?.limit != null) params.set('limit', String(opts.limit));
+
+  const res = await fetch(
+    `${API_BASE}/api/tanks/${encodeURIComponent(collectionName)}/readings-history?${params.toString()}`
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch readings history for ${collectionName}: ${text}`);
+  }
+  return res.json();
+}

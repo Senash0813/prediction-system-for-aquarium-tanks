@@ -21,6 +21,43 @@ const TrendChart = ({ data, title, status, height = 200, clickPath, unit }: Tren
   const navigate = useNavigate();
   const color = chartColors[status];
 
+  const isIsoLike = (v: any) => {
+    if (typeof v !== 'string') return false;
+    return /^\d{4}-\d{2}-\d{2}T/.test(v) || v.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(v);
+  };
+
+  const formatTimeTick = (value: any) => {
+    if (value == null) return '';
+    if (typeof value === 'string') {
+      const d = new Date(value);
+      if (!isNaN(d.getTime())) {
+        const useUtc = isIsoLike(value);
+        return d.toLocaleString(undefined, {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          ...(useUtc ? { timeZone: 'UTC' as const } : {}),
+        });
+      }
+      return value;
+    }
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      return value.toLocaleString(undefined, {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+    return String(value);
+  };
+
+  const formatValueTick = (value: any) => {
+    if (value == null) return '';
+    return unit ? `${value}${unit}` : String(value);
+  };
+
   return (
     <div
       className={`rounded-xl border bg-card p-5 shadow-sm animate-fade-in ${clickPath ? 'cursor-pointer card-hover' : ''}`}
@@ -34,11 +71,13 @@ const TrendChart = ({ data, title, status, height = 200, clickPath, unit }: Tren
             dataKey="time"
             tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
             interval="preserveStartEnd"
+            tickFormatter={formatTimeTick}
             tickLine={false}
             axisLine={false}
           />
           <YAxis
             tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            tickFormatter={formatValueTick}
             tickLine={false}
             axisLine={false}
             width={40}
@@ -51,6 +90,7 @@ const TrendChart = ({ data, title, status, height = 200, clickPath, unit }: Tren
               fontSize: '12px',
             }}
             formatter={(value: number) => [`${value}${unit || ''}`, title]}
+            labelFormatter={(label: any) => formatTimeTick(label)}
           />
           <Line
             type="monotone"
