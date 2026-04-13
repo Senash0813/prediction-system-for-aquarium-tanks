@@ -1,12 +1,27 @@
+import { useState, useEffect } from 'react';
 import AlertBanner from '@/components/AlertBanner';
 import TankCard from '@/components/TankCard';
 import { useTanks } from '@/context/TanksContext';
-import { useState } from 'react';
 import { TankStatus } from '@/data/dummyData';
+import { useChatContext } from '@/components/chatbot/ChatContext';
 
 const Index = () => {
   const { tanks } = useTanks();
   const [filter, setFilter] = useState<TankStatus | 'all'>('all');
+  const { setPageContext } = useChatContext();
+
+  useEffect(() => {
+    setPageContext({
+      page: 'dashboard',
+      allTanksSummary: tanks.map(t => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        stressScore: t.stressScore,
+      })),
+    });
+    return () => setPageContext(null);
+  }, [tanks, setPageContext]);
 
   const filteredTanks = filter === 'all' ? tanks : tanks.filter(tank => tank.status === filter);
 

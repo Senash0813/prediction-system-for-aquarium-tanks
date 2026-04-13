@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.chat_routes import router as chat_router
 from api.chemistry_routes import router as chemistry_router
 from api.tank_config_routes import router as tank_config_router
 from api.tanks_routes import router as tanks_router
@@ -17,6 +18,7 @@ app.add_middleware(
 )
 
 # Include routes
+app.include_router(chat_router)
 app.include_router(chemistry_router)
 app.include_router(tank_config_router)
 app.include_router(tanks_router)
