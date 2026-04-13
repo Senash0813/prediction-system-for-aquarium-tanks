@@ -3,7 +3,7 @@
 from datetime import datetime
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.errors import ConnectionFailure, OperationFailure
-from settings import MONGO_URI, MONGO_DB_NAME, INSIGHTS_DB_NAME, INSIGHTS_TTL_SECONDS, get_tank_collection_name, TREND_WINDOW_SIZE, TEMPERATURE_SAFE_MIN, TEMPERATURE_SAFE_MAX
+from .settings import MONGO_URI, MONGO_DB_NAME, INSIGHTS_DB_NAME, INSIGHTS_TTL_SECONDS, get_tank_collection_name, TREND_WINDOW_SIZE, TEMPERATURE_SAFE_MIN, TEMPERATURE_SAFE_MAX
 
 
 _client = None  # Module-level singleton — one connection reused across all calls
