@@ -1,16 +1,17 @@
 import logging
 from datetime import datetime, timezone, timedelta
 from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from settings import SCHEDULER_INTERVAL_SECONDS
-from mongo_client import (
+from .settings import SCHEDULER_INTERVAL_SECONDS
+from .mongo_client import (
     fetch_recent_readings,
     get_all_tank_ids,
     close_connection,
     save_water_chemistry_insight,
 )
-from insight_2_water_chemistry import generate_insight
+from .insight_2_water_chemistry import generate_insight
 
 
 # ---------------------------------------------------------------------------
@@ -135,3 +136,36 @@ def start_scheduler():
         scheduler.shutdown(wait=False)
         close_connection()
         logger.info("Scheduler and MongoDB connection closed cleanly.")
+
+
+def start_background_scheduler() -> BackgroundScheduler:
+    """
+    Starts a non-blocking BackgroundScheduler for use inside FastAPI.
+    Runs run_water_chemistry_insight_job() once immediately, then every
+    SCHEDULER_INTERVAL_SECONDS on a background thread.
+
+    Returns the scheduler instance so the caller (FastAPI lifespan) can
+    shut it down cleanly when the server stops.
+    """
+    scheduler = BackgroundScheduler(timezone="UTC")
+
+    scheduler.add_job(
+        func=run_water_chemistry_insight_job,
+        trigger=IntervalTrigger(seconds=SCHEDULER_INTERVAL_SECONDS),
+        id="water_chemistry_insight_job",
+        name="Water Chemistry Insight Generation",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=60,
+    )
+
+    # Run once immediately so the first insight isn't delayed.
+    run_water_chemistry_insight_job()
+    scheduler.start()
+
+    logger.info(
+        f"Water chemistry background scheduler started — running every {SCHEDULER_INTERVAL_SECONDS}s "
+        f"({SCHEDULER_INTERVAL_SECONDS // 60} min)"
+    )
+
+    return scheduler

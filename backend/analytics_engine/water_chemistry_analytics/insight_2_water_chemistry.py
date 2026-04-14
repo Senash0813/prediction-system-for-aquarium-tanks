@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from settings import (
+from .settings import (
     PH_SAFE_MIN,
     PH_SAFE_MAX,
     PH_CRITICAL_LOW,
