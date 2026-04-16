@@ -1,4 +1,6 @@
-from .feature_builder import build_feature_dict, feature_dict_to_row
+import pandas as pd
+
+from .feature_builder import build_feature_dict, FEATURE_COLUMNS
 from .model_loader import (
     load_ph_model,
     load_tds_model,
@@ -20,17 +22,19 @@ def predict_future(readings: list[dict]) -> dict:
     Predicts future pH, TDS, temperature, and future risk class.
     """
     features = build_feature_dict(readings)
-    row = [feature_dict_to_row(features)]
+
+    # Create DataFrame with same feature names used in training
+    X_input = pd.DataFrame([features], columns=FEATURE_COLUMNS)
 
     ph_model = load_ph_model()
     tds_model = load_tds_model()
     temp_model = load_temp_model()
     risk_model = load_future_risk_model()
 
-    predicted_ph = float(ph_model.predict(row)[0])
-    predicted_tds = float(tds_model.predict(row)[0])
-    predicted_temp = float(temp_model.predict(row)[0])
-    predicted_risk_code = int(risk_model.predict(row)[0])
+    predicted_ph = float(ph_model.predict(X_input)[0])
+    predicted_tds = float(tds_model.predict(X_input)[0])
+    predicted_temp = float(temp_model.predict(X_input)[0])
+    predicted_risk_code = int(risk_model.predict(X_input)[0])
 
     return {
         "predicted_ph": round(predicted_ph, 3),
