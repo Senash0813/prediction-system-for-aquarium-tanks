@@ -2,7 +2,7 @@ from datetime import datetime
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.errors import ConnectionFailure, OperationFailure
 
-from settings import (
+from .settings import (
     MONGO_URI,
     MONGO_DB_NAME,
     INSIGHTS_DB_NAME,

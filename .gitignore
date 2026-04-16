@@ -7,3 +7,6 @@ backend/analytics_engine/water_chemistry_analytics/__pycache__/
 backend/analytics_engine/temperature_stability/__pycache__/
 
 other_codes/.env
+
+backend/analytics_engine/filter_health/__pycache__/
+backend/analytics_engine/filter_health/.env
