@@ -14,12 +14,26 @@ const statusText: Record<TankStatus, string> = {
   critical: 'text-critical',
 };
 
-const metricRanges: Record<string, { min: number; safeStart: number; safeEnd: number; warnEnd: number; max: number }> = {
+// Fallback ranges used when no tank_config safe ranges are available (dummy tanks A–D).
+const fallbackRanges: Record<string, { min: number; safeStart: number; safeEnd: number; warnEnd: number; max: number }> = {
   Temperature: { min: 18, safeStart: 22, safeEnd: 26, warnEnd: 28, max: 32 },
   'pH Level': { min: 5.5, safeStart: 6.8, safeEnd: 7.5, warnEnd: 8.5, max: 10 },
   Turbidity: { min: 0, safeStart: 0, safeEnd: 3, warnEnd: 6, max: 10 },
   'Fish Stress Risk': { min: 0, safeStart: 0, safeEnd: 30, warnEnd: 60, max: 100 },
 };
+
+// Build a range object from tank_config safe_ranges (safeMin/safeMax).
+// Adds a ±25% warning buffer outside the safe zone for the bar visualization.
+function buildRangeFromConfig(safeMin: number, safeMax: number) {
+  const buffer = (safeMax - safeMin) * 0.25;
+  return {
+    min: safeMin - buffer,
+    safeStart: safeMin,
+    safeEnd: safeMax,
+    warnEnd: safeMax + buffer,
+    max: safeMax + buffer,
+  };
+}
 
 interface InsightCardProps {
   metric: TankMetric;
@@ -28,7 +42,12 @@ interface InsightCardProps {
 
 const InsightCard = ({ metric, large }: InsightCardProps) => {
   const Icon = icons[metric.label] || Activity;
-  const range = metricRanges[metric.label] || { min: 0, safeStart: 0, safeEnd: 50, warnEnd: 75, max: 100 };
+
+  // Use per-tank safe ranges from tank_config when available; fall back to static defaults.
+  const range =
+    metric.safeMin != null && metric.safeMax != null
+      ? buildRangeFromConfig(metric.safeMin, metric.safeMax)
+      : (fallbackRanges[metric.label] ?? { min: 0, safeStart: 0, safeEnd: 50, warnEnd: 75, max: 100 });
   const total = range.max - range.min;
 
   const dangerLeftW = ((range.safeStart - range.min) / total) * 100;

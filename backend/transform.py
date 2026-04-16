@@ -61,7 +61,7 @@ def transform_sensor_data(data, sampling_interval_minutes):
 
     # Replace numeric values with category labels
     data["light"] = categorize_light(data["light"])
-    data["turbidity"] = categorize_turbidity(data["turbidity"])
-    data["tds"] = categorize_tds(data["tds"])
+    # data["turbidity"] = categorize_turbidity(data["turbidity"])
+    # data["tds"] = categorize_tds(data["tds"])
 
     return data

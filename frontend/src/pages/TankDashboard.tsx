@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useTanks } from '@/context/TanksContext';
+import { useChatContext } from '@/components/chatbot/ChatContext';
 import InsightCard from '@/components/InsightCard';
 import TrendChart from '@/components/TrendChart';
 import PredictiveNotifications from '@/components/PredictiveNotifications';
@@ -9,7 +11,31 @@ import CircularGauge from '@/components/CircularGauge';
 const TankDashboard = () => {
   const { tankId } = useParams<{ tankId: string }>();
   const { tanks } = useTanks();
+  const { setPageContext } = useChatContext();
   const tank = tanks.find(t => t.id === (tankId || ''));
+
+  useEffect(() => {
+    if (!tank) return;
+    setPageContext({
+      page: 'tank_dashboard',
+      tankId: tank.id,
+      tankName: tank.name,
+      metrics: {
+        temperature: { value: tank.temperature.value, status: tank.temperature.status, unit: tank.temperature.unit, safeMin: tank.temperature.safeMin, safeMax: tank.temperature.safeMax },
+        ph: { value: tank.ph.value, status: tank.ph.status, unit: tank.ph.unit, safeMin: tank.ph.safeMin, safeMax: tank.ph.safeMax },
+        turbidity: { value: tank.turbidity.value, status: tank.turbidity.status, unit: tank.turbidity.unit, safeMin: tank.turbidity.safeMin, safeMax: tank.turbidity.safeMax },
+        stressScore: tank.stressScore,
+        stressStatus: tank.status,
+      },
+      notifications: tank.notifications.map(n => ({
+        kind: n.kind,
+        message: n.en,
+        severity: n.severity,
+        timestamp: n.timestamp,
+      })),
+    });
+    return () => setPageContext(null);
+  }, [tank, setPageContext]);
 
   if (!tank) {
     return (

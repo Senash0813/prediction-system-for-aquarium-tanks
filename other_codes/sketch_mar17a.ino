@@ -15,7 +15,7 @@ const char* ssid = "Dialog 4G 053";
 const char* password = "C271F9f3";
 
 // Backend REST API
-const char* backendUrl = "http://192.168.8.199:5000/api/sensor-data";
+const char* backendUrl = "http://aqua-gaurd-esp32.onrender.com/api/sensor-data";
 
 // ThingsBoard MQTT
 const char* tbServer = "thingsboard.cloud";
@@ -26,8 +26,6 @@ const char* tbToken = "ahMyRmwdcMTZtdoQiEul";
 String telegramBotToken = "8406793777:AAHbbbIQ3pftVcfRya710FaRt8cEl8F95B0";
 String telegramChatId   = "8331451609";
 
-// Device ID
-const char* deviceId = "tank_01";
 
 // ========================================================
 // TIME SETTINGS
@@ -40,7 +38,7 @@ const int daylightOffset_sec = 0;
 // SEND INTERVAL
 // ========================================================
 unsigned long lastSendTime = 0;
-const unsigned long sendInterval = 10000; // 10 sec
+const unsigned long sendInterval = 180000; // 3 min
 
 // Optional Telegram cooldown
 unsigned long lastTelegramAlertTime = 0;
@@ -562,8 +560,10 @@ void sendToBackend(const SensorData &data) {
   http.begin(backendUrl);
   http.addHeader("Content-Type", "application/json");
 
+  String mac = WiFi.macAddress();
+
   String jsonData = "{";
-  jsonData += "\"deviceId\":\"" + String(deviceId) + "\",";
+  jsonData += "\"mac\":\"" + mac + "\",";
   jsonData += "\"temperature\":" + String(data.temperature, 2) + ",";
   jsonData += "\"turbidity\":" + String(data.turbidityNTU, 2) + ",";
   jsonData += "\"tds\":" + String(data.tds, 2) + ",";
