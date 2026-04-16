@@ -7,7 +7,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from .settings import SCHEDULER_INTERVAL_SECONDS
-from .mongo_client import fetch_recent_readings, get_all_tank_ids, close_connection, save_temperature_insight, fetch_tank_config
+from .mongo_client import fetch_recent_readings, fetch_historical_readings, get_all_tank_ids, close_connection, save_temperature_insight, fetch_tank_config
 from .insight_1_temperature import generate_insight
 
 # ---------------------------------------------------------------------------
@@ -68,9 +68,12 @@ def _process_tank(tank_id: str):
             logger.warning(f"[{tank_id}] No readings found. Skipping.")
             return
 
+        historical_readings = fetch_historical_readings(tank_id)
+        logger.info(f"[{tank_id}] Fetched {len(historical_readings)} historical readings for anomaly baseline.")
+
         tank_config = fetch_tank_config(tank_id)
         logger.info(f"[{tank_id}] Running temperature insight on {len(readings)} reading(s)...")
-        insight = generate_insight(tank_id, readings, tank_config["safe_min"], tank_config["safe_max"])
+        insight = generate_insight(tank_id, readings, historical_readings, tank_config["safe_min"], tank_config["safe_max"])
 
         save_temperature_insight(tank_id, insight)
         _log_insight(tank_id, insight)
@@ -94,6 +97,8 @@ def _log_insight(tank_id: str, insight: dict):
     if status == "alert":
         logger.error(f"[{tank_id}] {message}")
     elif status == "warning":
+        logger.warning(f"[{tank_id}] {message}")
+    elif status == "anomaly":
         logger.warning(f"[{tank_id}] {message}")
     elif status == "normal":
         logger.info(f"[{tank_id}] {message}")
