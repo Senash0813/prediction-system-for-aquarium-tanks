@@ -4,6 +4,8 @@ export interface MetricSnapshot {
   value: number;
   status: string;
   unit: string;
+  safeMin?: number;
+  safeMax?: number;
 }
 
 export interface PageContext {

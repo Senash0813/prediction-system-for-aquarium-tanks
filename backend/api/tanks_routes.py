@@ -164,6 +164,14 @@ def get_latest_insights_by_type(collection: str):
                     "generated_at": generated_at,
                     "status": doc.get("status"),
                     "message": msg,
+                    # water_chemistry: nested per-metric detail
+                    "ph": doc.get("ph"),
+                    "tds": doc.get("tds"),
+                    # fish_stress_risk: score and level
+                    "risk_score": doc.get("risk_score"),
+                    "risk_level": doc.get("risk_level"),
+                    # temperature_stability: trend direction
+                    "trend": doc.get("trend"),
                 }
             )
 

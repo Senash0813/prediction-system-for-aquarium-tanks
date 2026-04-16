@@ -3,7 +3,7 @@
 from datetime import datetime
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.errors import ConnectionFailure, OperationFailure
-from .settings import MONGO_URI, MONGO_DB_NAME, INSIGHTS_DB_NAME, INSIGHTS_TTL_SECONDS, get_tank_collection_name, TREND_WINDOW_SIZE, TEMPERATURE_SAFE_MIN, TEMPERATURE_SAFE_MAX
+from .settings import MONGO_URI, MONGO_DB_NAME, INSIGHTS_DB_NAME, INSIGHTS_TTL_SECONDS, get_tank_collection_name, TREND_WINDOW_SIZE, TEMPERATURE_SAFE_MIN, TEMPERATURE_SAFE_MAX, ANOMALY_BASELINE_DAYS
 
 
 _client = None  # Module-level singleton — one connection reused across all calls
@@ -56,6 +56,45 @@ def fetch_recent_readings(tank_id: str, limit: int = TREND_WINDOW_SIZE) -> list[
         raise RuntimeError(f"[mongo_client] Could not connect to MongoDB: {e}")
     except OperationFailure as e:
         raise RuntimeError(f"[mongo_client] Query failed for {tank_id}: {e}")
+
+
+def fetch_historical_readings(tank_id: str, days: int = ANOMALY_BASELINE_DAYS) -> list[dict]:
+    """
+    Fetches all temperature readings for a given tank from the last `days` days.
+    Used exclusively to build the Isolation Forest training baseline.
+
+    Args:
+        tank_id : e.g. 'tank_1'
+        days    : how many days back to look (default: ANOMALY_BASELINE_DAYS)
+
+    Returns:
+        List of dicts with keys { 'temperature': float, 'timestamp': datetime },
+        ordered oldest → newest. Empty list if none found.
+
+    Raises:
+        RuntimeError on connection or query failure.
+    """
+    from datetime import timezone, timedelta
+
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        collection = get_db()[get_tank_collection_name(tank_id)]
+
+        cursor = (
+            collection
+            .find(
+                {"timestamp": {"$gte": cutoff}},
+                {"_id": 0, "temperature": 1, "timestamp": 1},
+            )
+            .sort("timestamp", ASCENDING)
+        )
+
+        return list(cursor)
+
+    except ConnectionFailure as e:
+        raise RuntimeError(f"[mongo_client] Could not connect to MongoDB: {e}")
+    except OperationFailure as e:
+        raise RuntimeError(f"[mongo_client] Historical query failed for {tank_id}: {e}")
 
 
 def fetch_tank_config(tank_id: str) -> dict:

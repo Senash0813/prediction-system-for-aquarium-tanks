@@ -66,3 +66,16 @@ TEMP_CHANGE_RATE_THRESHOLD = 0.02
 
 # If predicted time-to-unsafe is within this many minutes → raise alert
 PREDICTION_ALERT_WINDOW_MINUTES = 60
+
+# ---------------------------------------------------------------------------
+# Anomaly Detection (Isolation Forest)
+# ---------------------------------------------------------------------------
+# How many days of historical readings to use as the training baseline
+ANOMALY_BASELINE_DAYS = 7
+
+# Assumed proportion of anomalies in the historical data (5% = 1 in 20 readings)
+# Lower = stricter (fewer anomalies flagged), Higher = more sensitive
+ANOMALY_CONTAMINATION = 0.05
+
+# Minimum number of historical readings needed before the detector runs
+ANOMALY_MIN_HISTORY = 50

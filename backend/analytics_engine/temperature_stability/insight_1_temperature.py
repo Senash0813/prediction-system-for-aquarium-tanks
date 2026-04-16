@@ -7,6 +7,7 @@ from .settings import (
     TREND_WINDOW_SIZE,
 )
 from .light_mapper import assess_light_window
+from .anomaly_detector import detect_anomaly
 
 
 # ============================================================
@@ -266,24 +267,26 @@ def diagnose_cause(trend: dict, light_assessment: dict) -> str:
     return "Unable to determine cause."
 
 
-def generate_insight(tank_id: str, readings: list[dict], safe_min: float, safe_max: float) -> dict:
+def generate_insight(tank_id: str, readings: list[dict], historical_readings: list[dict], safe_min: float, safe_max: float) -> dict:
     """
     Master function — orchestrates all sections and produces
     the final structured insight for Insight 1.
 
     Args:
-        tank_id  : e.g. 'tank_1'
-        readings : raw readings list from mongo_client.fetch_recent_readings()
-        safe_min : tank-specific minimum safe temperature (°C) from tank_config
-        safe_max : tank-specific maximum safe temperature (°C) from tank_config
+        tank_id             : e.g. 'tank_1'
+        readings            : raw readings list from mongo_client.fetch_recent_readings()
+        historical_readings : 7-day baseline from mongo_client.fetch_historical_readings()
+        safe_min            : tank-specific minimum safe temperature (°C) from tank_config
+        safe_max            : tank-specific maximum safe temperature (°C) from tank_config
 
     Returns a dict with:
         - tank_id
-        - status        : 'alert' | 'warning' | 'normal' | 'insufficient_data'
+        - status        : 'alert' | 'warning' | 'anomaly' | 'normal' | 'insufficient_data'
         - message       : human-readable insight string (the main output)
         - trend         : trend analysis dict
         - prediction    : prediction dict
         - light         : light assessment dict
+        - anomaly       : anomaly detection result dict
         - generated_at  : UTC timestamp of when insight was generated
     """
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -309,8 +312,10 @@ def generate_insight(tank_id: str, readings: list[dict], safe_min: float, safe_m
     current_temp = readings[-1]["temperature"]
     prediction = predict_time_to_unsafe(current_temp, trend["rate_per_minute"], safe_min, safe_max)
     cause = diagnose_cause(trend, light_assessment)
+    anomaly = detect_anomaly(readings, historical_readings)
 
     # --- Determine status ---
+    # Priority: alert > warning > anomaly > normal
     if prediction["is_already_unsafe"]:
         status = "alert"
     elif (
@@ -318,11 +323,13 @@ def generate_insight(tank_id: str, readings: list[dict], safe_min: float, safe_m
         and prediction["predicted_breach_min"] <= PREDICTION_ALERT_WINDOW_MINUTES
     ):
         status = "warning"
+    elif anomaly["is_anomaly"]:
+        status = "anomaly"
     else:
         status = "normal"
 
     # --- Build human-readable message ---
-    message = _build_message(status, current_temp, trend, prediction, cause)
+    message = _build_message(status, current_temp, trend, prediction, cause, anomaly)
 
     return {
         "tank_id": tank_id,
@@ -331,6 +338,7 @@ def generate_insight(tank_id: str, readings: list[dict], safe_min: float, safe_m
         "trend": trend,
         "prediction": prediction,
         "light": light_assessment,
+        "anomaly": anomaly,
         "generated_at": generated_at,
     }
 
@@ -341,6 +349,7 @@ def _build_message(
     trend: dict,
     prediction: dict,
     cause: str,
+    anomaly: dict,
 ) -> str:
     """
     Constructs the final natural-language insight message.
@@ -353,6 +362,9 @@ def _build_message(
          Stable lighting suggests heater failure."
 
         "Temperature is stable at 26.2°C. No issues detected."
+
+        "Temperature (26.2°C) is within the safe range but behaving unusually
+         for this time of day. Monitor closely."
     """
     temp_str = f"{current_temp:.1f}°C"
     rate_str = f"{abs(trend['rate_per_minute']):.3f}°C/min"
@@ -371,6 +383,19 @@ def _build_message(
             f"⚠️  WARNING: Temperature ({temp_str}) will {direction_word} the safe level "
             f"in approximately {mins:.0f} minutes at current rate ({rate_str}). "
             f"{cause}"
+        )
+
+    if status == "anomaly":
+        reason_text = (
+            anomaly["reason"].replace("_", " ")
+            if anomaly.get("reason")
+            else "unusual behaviour detected"
+        )
+        flagged = anomaly.get("anomaly_count", 0)
+        return (
+            f"🔍  ANOMALY: Temperature ({temp_str}) is within the safe range but "
+            f"{reason_text} ({flagged} of {len(trend['temps'])} readings flagged). "
+            f"Monitor closely — this may be an early sign of a developing issue."
         )
 
     if status == "normal" and trend["direction"] != "stable":
