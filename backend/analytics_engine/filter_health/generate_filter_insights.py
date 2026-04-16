@@ -18,6 +18,7 @@ except ImportError:
 
 _insights_thread_lock = threading.Lock()
 _insights_thread_started = False
+_client = None
 
 
 def _get_insights_db():
@@ -36,8 +37,12 @@ def _get_insights_db():
     uri = os.getenv("MONGO_URI") or os.getenv("MONGODB_URI") or "mongodb://localhost:27017"
     insights_db_name = os.getenv("MONGO_INSIGHTS_DB", "generated_insights")
 
-    client = MongoClient(uri)
-    return client[insights_db_name]
+    global _client
+
+    if _client is None:
+        _client = MongoClient(uri)
+
+    return _client[insights_db_name]
 
 
 def _trend_direction_from_delta(turbidity_delta: Any) -> str:
@@ -132,7 +137,7 @@ def _build_filter_health_insight(tank_id: str, info: Dict[str, Any]) -> Dict[str
     return insight
 
 
-def generate_filter_health_insights() -> None:
+def generate_filter_health_insights() -> Dict[str, Any]:
     """Generate filter-health insights for all tanks and write to MongoDB.
 
     This runs once: it reads the latest window for each tank_*
@@ -148,6 +153,9 @@ def generate_filter_health_insights() -> None:
     # collections.
     all_tanks_info = get_filter_health_for_all_tanks(n=10, collection_prefix="tank_")
 
+    inserted_count = 0
+    inserted_tanks: list[str] = []
+
     for tank_id, info in all_tanks_info.items():
         insight_doc = _build_filter_health_insight(tank_id, info)
 
@@ -155,6 +163,14 @@ def generate_filter_health_insights() -> None:
         # (tank_1, tank_2, ...), matching your example layout.
         coll = insights_db[tank_id]
         coll.insert_one(insight_doc)
+        inserted_count += 1
+        inserted_tanks.append(tank_id)
+
+    return {
+        "inserted_count": inserted_count,
+        "tanks": inserted_tanks,
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
 
 
 def start_periodic_filter_health_insights(interval_minutes: float = 30.0) -> None:
@@ -176,7 +192,13 @@ def start_periodic_filter_health_insights(interval_minutes: float = 30.0) -> Non
     def _worker() -> None:
         while True:
             try:
-                generate_filter_health_insights()
+                summary = generate_filter_health_insights()
+                print(
+                    "[filter_health] insights pushed: "
+                    f"count={summary['inserted_count']} "
+                    f"tanks={summary['tanks']} "
+                    f"at={summary['generated_at']}"
+                )
             except Exception as exc:
                 # Keep scheduler alive even if one run fails.
                 print(f"[filter_health] insight generation failed: {exc}")
@@ -184,6 +206,17 @@ def start_periodic_filter_health_insights(interval_minutes: float = 30.0) -> Non
 
     thread = threading.Thread(target=_worker, name="filter-health-insights", daemon=True)
     thread.start()
+    print(
+        "[filter_health] insight generation has started "
+        f"(interval={interval_minutes} min, thread={thread.name})"
+    )
+
+
+def close_connection() -> None:
+    global _client
+    if _client is not None:
+        _client.close()
+        _client = None
 
 
 def main() -> None:
