@@ -1,9 +1,29 @@
 from datetime import datetime, timezone
-from settings import (
-    TEMP_SAFE_MIN, TEMP_SAFE_MAX,
-    PH_SAFE_MIN, PH_SAFE_MAX, PH_DANGER_MIN, PH_DANGER_MAX,
-    TURBIDITY_MODERATE, TURBIDITY_HIGH
-)
+
+try:
+    # Package import (used when loaded by FastAPI app)
+    from .settings import (
+        TEMP_SAFE_MIN,
+        TEMP_SAFE_MAX,
+        PH_SAFE_MIN,
+        PH_SAFE_MAX,
+        PH_DANGER_MIN,
+        PH_DANGER_MAX,
+        TURBIDITY_MODERATE,
+        TURBIDITY_HIGH,
+    )
+except ImportError:
+    # Script import (used when file is run directly)
+    from settings import (
+        TEMP_SAFE_MIN,
+        TEMP_SAFE_MAX,
+        PH_SAFE_MIN,
+        PH_SAFE_MAX,
+        PH_DANGER_MIN,
+        PH_DANGER_MAX,
+        TURBIDITY_MODERATE,
+        TURBIDITY_HIGH,
+    )
 
 def prepare_readings(raw_readings):
     cleaned = []

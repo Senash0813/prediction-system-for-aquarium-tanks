@@ -14,6 +14,9 @@ from analytics_engine.temperature_stability.mongo_client import close_connection
 from analytics_engine.water_chemistry_analytics.job_runner import start_background_scheduler as start_water_chemistry_background_scheduler
 from analytics_engine.water_chemistry_analytics.mongo_client import close_connection as close_water_chemistry_connection
 
+from analytics_engine.fishrisk.job_runner import start_background_scheduler as start_fish_risk_background_scheduler
+from analytics_engine.fishrisk.mongo_client import close_connection as close_fish_risk_connection
+
 from analytics_engine.filter_health.generate_filter_insights import start_periodic_filter_health_insights
 from api.filter_health_routes import router as filter_health_router
 
@@ -31,6 +34,10 @@ async def lifespan(_app: FastAPI):
     water_chem_scheduler = start_water_chemistry_background_scheduler()
     logger.info("Water chemistry scheduler running.")
 
+    logger.info("Starting fish risk scheduler...")
+    fish_risk_scheduler = start_fish_risk_background_scheduler()
+    logger.info("Fish risk scheduler running.")
+
     yield  # Server is live and handling requests here
 
     # ── Shutdown ─────────────────────────────────────────────────────────────
@@ -41,6 +48,10 @@ async def lifespan(_app: FastAPI):
     logger.info("Shutting down water chemistry scheduler...")
     water_chem_scheduler.shutdown(wait=False)
     close_water_chemistry_connection()
+
+    logger.info("Shutting down fish risk scheduler...")
+    fish_risk_scheduler.shutdown(wait=False)
+    close_fish_risk_connection()
 
     logger.info("Schedulers and MongoDB connections closed.")
 
