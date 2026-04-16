@@ -21,9 +21,9 @@ const TankDashboard = () => {
       tankId: tank.id,
       tankName: tank.name,
       metrics: {
-        temperature: { value: tank.temperature.value, status: tank.temperature.status, unit: tank.temperature.unit },
-        ph: { value: tank.ph.value, status: tank.ph.status, unit: tank.ph.unit },
-        turbidity: { value: tank.turbidity.value, status: tank.turbidity.status, unit: tank.turbidity.unit },
+        temperature: { value: tank.temperature.value, status: tank.temperature.status, unit: tank.temperature.unit, safeMin: tank.temperature.safeMin, safeMax: tank.temperature.safeMax },
+        ph: { value: tank.ph.value, status: tank.ph.status, unit: tank.ph.unit, safeMin: tank.ph.safeMin, safeMax: tank.ph.safeMax },
+        turbidity: { value: tank.turbidity.value, status: tank.turbidity.status, unit: tank.turbidity.unit, safeMin: tank.turbidity.safeMin, safeMax: tank.turbidity.safeMax },
         stressScore: tank.stressScore,
         stressStatus: tank.status,
       },

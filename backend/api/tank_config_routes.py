@@ -21,7 +21,27 @@ class SafeRange(BaseModel):
 
 class TankConfigRequest(BaseModel):
     tank_id: str
+    mac_address: str = ""
     safe_ranges: dict[str, SafeRange]
+
+
+@router.get("/{tank_id}")
+def get_tank_config(tank_id: str):
+    try:
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        db = client[DATABASE_NAME]
+        collection = db[COLLECTION_NAME]
+
+        doc = collection.find_one({"tank_id": tank_id}, {"_id": 0, "safe_ranges": 1})
+        if not doc:
+            raise HTTPException(status_code=404, detail=f"No config found for tank '{tank_id}'")
+
+        return {"tank_id": tank_id, "safe_ranges": doc.get("safe_ranges", {})}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("")
@@ -39,6 +59,7 @@ def save_tank_config(config: TankConfigRequest):
 
         document = {
             "tank_id": config.tank_id,
+            "mac_address": config.mac_address,
             "safe_ranges": {
                 param: {"min": r.min, "max": r.max}
                 for param, r in config.safe_ranges.items()

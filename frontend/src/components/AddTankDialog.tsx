@@ -28,7 +28,7 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
   const [macAddress, setMacAddress] = useState('');
   const { addTank, tanks } = useTanks();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim();
 
@@ -86,24 +86,27 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
       return;
     }
 
-    addTank(trimmedName, {
-      temperatureMin, temperatureMax,
-      phMin, phMax,
-      turbidityMin, turbidityMax,
-      lightMin, lightMax,
-      tdsMin, tdsMax,
-      macAddress: macAddress.trim().toUpperCase(),
-    });
-
-    toast.success(`${trimmedName} has been added`);
-    setName('');
-    setTemperatureMin(''); setTemperatureMax('');
-    setPhMin(''); setPhMax('');
-    setTurbidityMin(''); setTurbidityMax('');
-    setLightMin(''); setLightMax('');
-    setTdsMin(''); setTdsMax('');
-    setMacAddress('');
-    onOpenChange(false);
+    try {
+      await addTank(trimmedName, {
+        temperatureMin, temperatureMax,
+        phMin, phMax,
+        turbidityMin, turbidityMax,
+        lightMin, lightMax,
+        tdsMin, tdsMax,
+        macAddress: macAddress.trim().toUpperCase(),
+      });
+      toast.success(`${trimmedName} has been added`);
+      setName('');
+      setTemperatureMin(''); setTemperatureMax('');
+      setPhMin(''); setPhMax('');
+      setTurbidityMin(''); setTurbidityMax('');
+      setLightMin(''); setLightMax('');
+      setTdsMin(''); setTdsMax('');
+      setMacAddress('');
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(`Failed to save tank: ${err?.message ?? 'Unknown error'}`);
+    }
   };
 
   return (

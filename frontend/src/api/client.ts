@@ -129,6 +129,20 @@ export async function sendChatMessage(
   return data.reply as string;
 }
 
+export async function getTankConfig(collectionName: string): Promise<{
+  tank_id: string;
+  safe_ranges: Record<string, { min: number; max: number }>;
+} | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/tank-config/${encodeURIComponent(collectionName)}`);
+    if (res.status === 404) return null;
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function getReadingsHistory(
   collectionName: string,
   range: '24h' | '7d' | '30d' = '24h',
