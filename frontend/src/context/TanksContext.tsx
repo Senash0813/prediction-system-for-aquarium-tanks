@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { tanks as initialTanks, Tank, generateTimeSeries, TankStatus } from '@/data/dummyData';
-import { saveTankConfig, getTankCollections, getLatestReading, getLatestInsightsByType, getRiskHistory, getReadingsHistory, getTankConfig } from '@/api/client';
+import { saveTankConfig, deleteTankConfig, getTankCollections, getLatestReading, getLatestInsightsByType, getRiskHistory, getReadingsHistory, getTankConfig } from '@/api/client';
 
 interface TankDetails {
   temperatureMin: string; temperatureMax: string;
@@ -14,13 +14,14 @@ interface TankDetails {
 interface TanksContextType {
   tanks: Tank[];
   addTank: (name: string, details: TankDetails) => Promise<void>;
-  deleteTank: (id: string) => void;
+  deleteTank: (id: string) => Promise<void>;
 }
 
 const TanksContext = createContext<TanksContextType | undefined>(undefined);
 
 export const TanksProvider = ({ children }: { children: ReactNode }) => {
   const [tanks, setTanks] = useState<Tank[]>(initialTanks);
+  const [collectionsKey, setCollectionsKey] = useState(0);
   const tanksRef = useRef<Tank[]>(initialTanks);
   const refreshInFlightRef = useRef(false);
 
@@ -292,7 +293,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
           });
 
         // Build Tank objects for all parsed collections but avoid duplicates
-        const existingIds = new Set(initialTanks.map((t) => t.id));
+        const existingIds = new Set(tanksRef.current.map((t) => t.id));
         const collectionsToFetch = parsed.filter((colName) => !existingIds.has(colName));
 
         if (collectionsToFetch.length === 0) return;
@@ -468,53 +469,28 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [collectionsKey]);
 
   const addTank = async (name: string, details: TankDetails) => {
-    const id = `tank-${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
-    const tempMin = parseFloat(details.temperatureMin);
-    const tempMax = parseFloat(details.temperatureMax);
-    const phMin = parseFloat(details.phMin);
-    const phMax = parseFloat(details.phMax);
-    const turbMin = parseFloat(details.turbidityMin);
-    const turbMax = parseFloat(details.turbidityMax);
-    const tempMid = (tempMin + tempMax) / 2;
-    const phMid = (phMin + phMax) / 2;
-    const turbMid = (turbMin + turbMax) / 2;
-
-    const newTank: Tank = {
-      id,
-      name,
-      stressScore: 10,
-      status: 'safe' as TankStatus,
-      insight: 'New tank – monitoring started',
-      temperature: { value: tempMid, status: 'safe', unit: '°C', trend: 'stable', label: 'Temperature', safeMin: tempMin, safeMax: tempMax },
-      ph: { value: phMid, status: 'safe', unit: '', trend: '↔', label: 'pH Level', safeMin: phMin, safeMax: phMax },
-      turbidity: { value: turbMid, status: 'safe', unit: 'NTU', trend: 'stable', label: 'Turbidity', safeMin: turbMin, safeMax: turbMax },
-      stressHistory: generateTimeSeries(10, 3, 24),
-      temperatureHistory: generateTimeSeries(tempMid, 0.5, 24),
-      phHistory: generateTimeSeries(phMid, 0.15, 24),
-      turbidityHistory: generateTimeSeries(turbMid, 0.3, 24),
-      notifications: [
-        { id: `${id}-n1`, en: 'Tank created. Monitoring has begun.', si: 'ටැංකිය සාදන ලදී. නිරීක්ෂණය ආරම්භ කර ඇත.', severity: 'safe', timestamp: 'Just now' },
-      ],
-    };
-    setTanks(prev => [...prev, newTank]);
-
     await saveTankConfig({
       tank_id: name,
       mac_address: details.macAddress,
       safe_ranges: {
-        temperature: { min: tempMin, max: tempMax },
-        ph:          { min: phMin,   max: phMax   },
-        turbidity:   { min: turbMin, max: turbMax  },
-        light:       { min: parseFloat(details.lightMin), max: parseFloat(details.lightMax) },
-        tds:         { min: parseFloat(details.tdsMin),   max: parseFloat(details.tdsMax)   },
+        temperature: { min: parseFloat(details.temperatureMin), max: parseFloat(details.temperatureMax) },
+        ph:          { min: parseFloat(details.phMin),          max: parseFloat(details.phMax)          },
+        turbidity:   { min: parseFloat(details.turbidityMin),   max: parseFloat(details.turbidityMax)   },
+        light:       { min: parseFloat(details.lightMin),       max: parseFloat(details.lightMax)       },
+        tds:         { min: parseFloat(details.tdsMin),         max: parseFloat(details.tdsMax)         },
       },
     });
+
+    // Re-run the collection fetch after a short delay so the new tank_<n>
+    // collection created by the backend is discovered and added to state.
+    setTimeout(() => setCollectionsKey(k => k + 1), 1000);
   };
 
-  const deleteTank = (id: string) => {
+  const deleteTank = async (id: string) => {
+    await deleteTankConfig(id);
     setTanks(prev => prev.filter(t => t.id !== id));
   };
 

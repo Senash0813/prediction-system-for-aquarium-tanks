@@ -25,6 +25,34 @@ class TankConfigRequest(BaseModel):
     safe_ranges: dict[str, SafeRange]
 
 
+@router.delete("/{tank_id}")
+def delete_tank(tank_id: str):
+    try:
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        db = client[DATABASE_NAME]
+
+        # 1. Remove the tank_config document
+        result = db[COLLECTION_NAME].delete_one({"tank_id": tank_id})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail=f"No config found for tank '{tank_id}'")
+
+        # 2. Drop the tank_<n> collection (processed readings)
+        if tank_id in db.list_collection_names():
+            db.drop_collection(tank_id)
+
+        # 3. Drop raw_tank_<n> if it exists
+        raw_collection = f"raw_{tank_id}"
+        if raw_collection in db.list_collection_names():
+            db.drop_collection(raw_collection)
+
+        return {"message": f"Tank '{tank_id}' deleted successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{tank_id}")
 def get_tank_config(tank_id: str):
     try:
@@ -68,6 +96,12 @@ def save_tank_config(config: TankConfigRequest):
         }
 
         collection.insert_one(document)
+
+        # Create the tank_<n> collection in aqua_gaurd_db so the frontend
+        # discovers it via GET /api/tanks on next fetch.
+        if config.tank_id not in db.list_collection_names():
+            db.create_collection(config.tank_id)
+
         return {"message": f"Config for '{config.tank_id}' saved successfully"}
 
     except HTTPException:
