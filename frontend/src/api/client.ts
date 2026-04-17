@@ -25,6 +25,16 @@ export interface TankConfigPayload {
   };
 }
 
+export async function deleteTankConfig(tankId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/tank-config/${encodeURIComponent(tankId)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to delete tank: ${text}`);
+  }
+}
+
 export async function saveTankConfig(payload: TankConfigPayload): Promise<void> {
   const res = await fetch(`${API_BASE}/api/tank-config`, {
     method: 'POST',

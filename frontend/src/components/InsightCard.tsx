@@ -15,23 +15,25 @@ const statusText: Record<TankStatus, string> = {
 };
 
 // Fallback ranges used when no tank_config safe ranges are available (dummy tanks A–D).
-const fallbackRanges: Record<string, { min: number; safeStart: number; safeEnd: number; warnEnd: number; max: number }> = {
-  Temperature: { min: 18, safeStart: 22, safeEnd: 26, warnEnd: 28, max: 32 },
-  'pH Level': { min: 5.5, safeStart: 6.8, safeEnd: 7.5, warnEnd: 8.5, max: 10 },
-  Turbidity: { min: 0, safeStart: 0, safeEnd: 3, warnEnd: 6, max: 10 },
-  'Fish Stress Risk': { min: 0, safeStart: 0, safeEnd: 30, warnEnd: 60, max: 100 },
+// 5-segment: danger-left / warn-left / safe / warn-right / danger-right
+const fallbackRanges: Record<string, { min: number; warnStart: number; safeStart: number; safeEnd: number; warnEnd: number; max: number }> = {
+  Temperature:        { min: 18,  warnStart: 20,  safeStart: 22,  safeEnd: 28,  warnEnd: 30,  max: 32  },
+  'pH Level':         { min: 5.5, warnStart: 6.0, safeStart: 6.5, safeEnd: 8.5, warnEnd: 9.0, max: 9.5 },
+  Turbidity:          { min: 0,   warnStart: 0,   safeStart: 0,   safeEnd: 5,   warnEnd: 10,  max: 15  },
+  'Fish Stress Risk': { min: 0,   warnStart: 0,   safeStart: 0,   safeEnd: 40,  warnEnd: 70,  max: 100 },
 };
 
-// Build a range object from tank_config safe_ranges (safeMin/safeMax).
-// Adds a ±25% warning buffer outside the safe zone for the bar visualization.
+// Build a 5-segment range from tank_config safe_ranges.
+// Warning buffer = 30% of the safe span on each side; danger buffer = another 30%.
 function buildRangeFromConfig(safeMin: number, safeMax: number) {
-  const buffer = (safeMax - safeMin) * 0.25;
+  const buf = (safeMax - safeMin) * 0.3;
   return {
-    min: safeMin - buffer,
+    min:       safeMin - buf * 2,
+    warnStart: safeMin - buf,
     safeStart: safeMin,
-    safeEnd: safeMax,
-    warnEnd: safeMax + buffer,
-    max: safeMax + buffer,
+    safeEnd:   safeMax,
+    warnEnd:   safeMax + buf,
+    max:       safeMax + buf * 2,
   };
 }
 
@@ -47,13 +49,14 @@ const InsightCard = ({ metric, large }: InsightCardProps) => {
   const range =
     metric.safeMin != null && metric.safeMax != null
       ? buildRangeFromConfig(metric.safeMin, metric.safeMax)
-      : (fallbackRanges[metric.label] ?? { min: 0, safeStart: 0, safeEnd: 50, warnEnd: 75, max: 100 });
+      : (fallbackRanges[metric.label] ?? { min: 0, warnStart: 0, safeStart: 0, safeEnd: 50, warnEnd: 75, max: 100 });
   const total = range.max - range.min;
 
-  const dangerLeftW = ((range.safeStart - range.min) / total) * 100;
-  const safeW = ((range.safeEnd - range.safeStart) / total) * 100;
-  const warnW = ((range.warnEnd - range.safeEnd) / total) * 100;
-  const dangerRightW = ((range.max - range.warnEnd) / total) * 100;
+  const dangerLeftW  = ((range.warnStart - range.min)      / total) * 100;
+  const warnLeftW    = ((range.safeStart - range.warnStart) / total) * 100;
+  const safeW        = ((range.safeEnd   - range.safeStart) / total) * 100;
+  const warnRightW   = ((range.warnEnd   - range.safeEnd)   / total) * 100;
+  const dangerRightW = ((range.max       - range.warnEnd)   / total) * 100;
 
   const clamped = Math.min(Math.max(metric.value, range.min), range.max);
   const markerPos = ((clamped - range.min) / total) * 100;
@@ -82,10 +85,11 @@ const InsightCard = ({ metric, large }: InsightCardProps) => {
 
       <div className="relative mt-1">
         <div className="flex h-2.5 w-full overflow-hidden rounded-full">
-          {dangerLeftW > 0 && <div className="bg-critical/40" style={{ width: `${dangerLeftW}%` }} />}
-          <div className="bg-safe/50" style={{ width: `${safeW}%` }} />
-          <div className="bg-warning/50" style={{ width: `${warnW}%` }} />
-          <div className="bg-critical/40" style={{ width: `${dangerRightW}%` }} />
+          {dangerLeftW  > 0 && <div className="bg-critical" style={{ width: `${dangerLeftW}%`  }} />}
+          {warnLeftW    > 0 && <div className="bg-warning"  style={{ width: `${warnLeftW}%`    }} />}
+          {safeW        > 0 && <div className="bg-safe"     style={{ width: `${safeW}%`        }} />}
+          {warnRightW   > 0 && <div className="bg-warning"  style={{ width: `${warnRightW}%`   }} />}
+          {dangerRightW > 0 && <div className="bg-critical" style={{ width: `${dangerRightW}%` }} />}
         </div>
         <div
           className="absolute -top-0.5 h-3.5 w-1 rounded-full bg-card-foreground shadow-md transition-all duration-500"

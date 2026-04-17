@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { tanks as initialTanks, Tank, generateTimeSeries, TankStatus } from '@/data/dummyData';
-import { saveTankConfig, getTankCollections, getLatestReading, getLatestInsightsByType, getRiskHistory, getReadingsHistory, getTankConfig } from '@/api/client';
+import { saveTankConfig, deleteTankConfig, getTankCollections, getLatestReading, getLatestInsightsByType, getRiskHistory, getReadingsHistory, getTankConfig } from '@/api/client';
 
 interface TankDetails {
   temperatureMin: string; temperatureMax: string;
@@ -14,13 +14,14 @@ interface TankDetails {
 interface TanksContextType {
   tanks: Tank[];
   addTank: (name: string, details: TankDetails) => Promise<void>;
-  deleteTank: (id: string) => void;
+  deleteTank: (id: string) => Promise<void>;
 }
 
 const TanksContext = createContext<TanksContextType | undefined>(undefined);
 
 export const TanksProvider = ({ children }: { children: ReactNode }) => {
   const [tanks, setTanks] = useState<Tank[]>(initialTanks);
+  const [collectionsKey, setCollectionsKey] = useState(0);
   const tanksRef = useRef<Tank[]>(initialTanks);
   const refreshInFlightRef = useRef(false);
 
@@ -75,6 +76,14 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     return 'safe';
   };
 
+  // oxygen_estimate: "low_oxygen_risk" → critical, "moderate_risk" → warning, else safe
+  const oxygenStatusFromInsight = (ins: any): TankStatus => {
+    const s = typeof ins?.status === 'string' ? ins.status.toLowerCase() : '';
+    if (s === 'low_oxygen_risk') return 'critical';
+    if (s === 'moderate_risk') return 'warning';
+    return 'safe';
+  };
+
   const worstStatus = (...statuses: TankStatus[]): TankStatus => {
     if (statuses.includes('critical')) return 'critical';
     if (statuses.includes('warning')) return 'warning';
@@ -92,16 +101,18 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     const chemIns    = byType('water_chemistry');
     const filterIns  = byType('filter_health');
     const riskIns    = byType('fish_stress_risk');
+    const oxygenIns  = byType('oxygen_estimate');
 
     const tempStatus   = tempIns   ? tempStatusFromInsight(tempIns)       : 'safe' as TankStatus;
     const phStatus     = chemIns   ? phStatusFromInsight(chemIns)         : 'safe' as TankStatus;
     const turbStatus   = filterIns ? turbidityStatusFromInsight(filterIns) : 'safe' as TankStatus;
     const stressStatus = riskIns   ? stressStatusFromInsight(riskIns)     : 'safe' as TankStatus;
+    const oxygenStatus = oxygenIns ? oxygenStatusFromInsight(oxygenIns)   : 'safe' as TankStatus;
     const overallStatus = worstStatus(tempStatus, phStatus, turbStatus, stressStatus);
 
     const riskScore = riskIns?.risk_score != null ? Number(riskIns.risk_score) : null;
 
-    return { tempStatus, phStatus, turbStatus, overallStatus, riskScore };
+    return { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus };
   };
 
   const formatBackendTimestampUtc = (ts: any): string => {
@@ -109,14 +120,14 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     const raw = String(ts);
     const d = new Date(raw);
     if (isNaN(d.getTime())) return raw;
-    // Backend timestamps are ISO w/ timezone; render in UTC to avoid date shifting.
-    return d.toLocaleString(undefined, {
+    return d.toLocaleString('en-IN', {
       month: '2-digit',
       day: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      timeZone: 'UTC',
+      hour12: true,
+      timeZone: 'Asia/Kolkata',
     });
   };
 
@@ -138,6 +149,8 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
         return turbidityStatusFromInsight(ins);     // needs_cleaning→critical, warning→warning
       case 'fish_stress_risk':
         return stressStatusFromInsight(ins);        // HIGH→critical, MODERATE→warning (uses risk_level)
+      case 'oxygen_estimate':
+        return oxygenStatusFromInsight(ins);        // low_oxygen_risk→critical, moderate_risk→warning
       default:
         return mapInsightStatusToSeverity(ins?.status);
     }
@@ -151,7 +164,9 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
         const msg = ins?.message != null ? String(ins.message) : '';
         const generatedAt = ins?.generated_at;
         if (!kind && !msg) return null;
-        const text = kind ? `${kind}: ${msg || ''}`.trim() : msg;
+        // Strip the leading "kind: " prefix so the card tag doesn't duplicate it
+        const stripped = kind && msg.startsWith(`${kind}:`) ? msg.slice(kind.length + 1).trim() : msg;
+        const text = stripped || msg;
         return {
           id: `${tankId}-ins-${i}-${kind ?? 'insight'}`,
           kind,
@@ -224,7 +239,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
             const nextPh = u.phVal ?? t.ph.value;
             const nextTurb = u.turbVal ?? t.turbidity.value;
 
-            const { tempStatus, phStatus, turbStatus, overallStatus, riskScore } =
+            const { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus } =
               deriveStatusesFromInsights(u.insightsByType);
 
             const nextRisk = riskScore ?? t.stressScore;
@@ -235,6 +250,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
               ...t,
               stressScore: nextRisk,
               status: overallStatus,
+              oxygenStatus,
               temperature: {
                 ...t.temperature,
                 value: nextTemp,
@@ -292,7 +308,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
           });
 
         // Build Tank objects for all parsed collections but avoid duplicates
-        const existingIds = new Set(initialTanks.map((t) => t.id));
+        const existingIds = new Set(tanksRef.current.map((t) => t.id));
         const collectionsToFetch = parsed.filter((colName) => !existingIds.has(colName));
 
         if (collectionsToFetch.length === 0) return;
@@ -322,7 +338,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
               const id = colName;
               const prettyName = colName.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 
-              const { tempStatus, phStatus, turbStatus, overallStatus, riskScore } =
+              const { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus } =
                 deriveStatusesFromInsights(insightsByType);
 
               const computedScore = Math.round((phVal + tempVal + turbVal) / 3);
@@ -396,6 +412,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
                 name: prettyName,
                 stressScore: riskScore ?? computedScore,
                 status: overallStatus,
+                oxygenStatus,
                 insight: 'Auto-discovered tank from DB',
                 temperature: {
                   value: tempVal,
@@ -468,53 +485,28 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [collectionsKey]);
 
   const addTank = async (name: string, details: TankDetails) => {
-    const id = `tank-${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
-    const tempMin = parseFloat(details.temperatureMin);
-    const tempMax = parseFloat(details.temperatureMax);
-    const phMin = parseFloat(details.phMin);
-    const phMax = parseFloat(details.phMax);
-    const turbMin = parseFloat(details.turbidityMin);
-    const turbMax = parseFloat(details.turbidityMax);
-    const tempMid = (tempMin + tempMax) / 2;
-    const phMid = (phMin + phMax) / 2;
-    const turbMid = (turbMin + turbMax) / 2;
-
-    const newTank: Tank = {
-      id,
-      name,
-      stressScore: 10,
-      status: 'safe' as TankStatus,
-      insight: 'New tank – monitoring started',
-      temperature: { value: tempMid, status: 'safe', unit: '°C', trend: 'stable', label: 'Temperature', safeMin: tempMin, safeMax: tempMax },
-      ph: { value: phMid, status: 'safe', unit: '', trend: '↔', label: 'pH Level', safeMin: phMin, safeMax: phMax },
-      turbidity: { value: turbMid, status: 'safe', unit: 'NTU', trend: 'stable', label: 'Turbidity', safeMin: turbMin, safeMax: turbMax },
-      stressHistory: generateTimeSeries(10, 3, 24),
-      temperatureHistory: generateTimeSeries(tempMid, 0.5, 24),
-      phHistory: generateTimeSeries(phMid, 0.15, 24),
-      turbidityHistory: generateTimeSeries(turbMid, 0.3, 24),
-      notifications: [
-        { id: `${id}-n1`, en: 'Tank created. Monitoring has begun.', si: 'ටැංකිය සාදන ලදී. නිරීක්ෂණය ආරම්භ කර ඇත.', severity: 'safe', timestamp: 'Just now' },
-      ],
-    };
-    setTanks(prev => [...prev, newTank]);
-
     await saveTankConfig({
       tank_id: name,
       mac_address: details.macAddress,
       safe_ranges: {
-        temperature: { min: tempMin, max: tempMax },
-        ph:          { min: phMin,   max: phMax   },
-        turbidity:   { min: turbMin, max: turbMax  },
-        light:       { min: parseFloat(details.lightMin), max: parseFloat(details.lightMax) },
-        tds:         { min: parseFloat(details.tdsMin),   max: parseFloat(details.tdsMax)   },
+        temperature: { min: parseFloat(details.temperatureMin), max: parseFloat(details.temperatureMax) },
+        ph:          { min: parseFloat(details.phMin),          max: parseFloat(details.phMax)          },
+        turbidity:   { min: parseFloat(details.turbidityMin),   max: parseFloat(details.turbidityMax)   },
+        light:       { min: parseFloat(details.lightMin),       max: parseFloat(details.lightMax)       },
+        tds:         { min: parseFloat(details.tdsMin),         max: parseFloat(details.tdsMax)         },
       },
     });
+
+    // Re-run the collection fetch after a short delay so the new tank_<n>
+    // collection created by the backend is discovered and added to state.
+    setTimeout(() => setCollectionsKey(k => k + 1), 1000);
   };
 
-  const deleteTank = (id: string) => {
+  const deleteTank = async (id: string) => {
+    await deleteTankConfig(id);
     setTanks(prev => prev.filter(t => t.id !== id));
   };
 
