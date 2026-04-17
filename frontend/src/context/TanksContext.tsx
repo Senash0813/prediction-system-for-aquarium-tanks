@@ -110,14 +110,14 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     const raw = String(ts);
     const d = new Date(raw);
     if (isNaN(d.getTime())) return raw;
-    // Backend timestamps are ISO w/ timezone; render in UTC to avoid date shifting.
-    return d.toLocaleString(undefined, {
+    return d.toLocaleString('en-IN', {
       month: '2-digit',
       day: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      timeZone: 'UTC',
+      hour12: true,
+      timeZone: 'Asia/Kolkata',
     });
   };
 
@@ -152,7 +152,9 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
         const msg = ins?.message != null ? String(ins.message) : '';
         const generatedAt = ins?.generated_at;
         if (!kind && !msg) return null;
-        const text = kind ? `${kind}: ${msg || ''}`.trim() : msg;
+        // Strip the leading "kind: " prefix so the card tag doesn't duplicate it
+        const stripped = kind && msg.startsWith(`${kind}:`) ? msg.slice(kind.length + 1).trim() : msg;
+        const text = stripped || msg;
         return {
           id: `${tankId}-ins-${i}-${kind ?? 'insight'}`,
           kind,
