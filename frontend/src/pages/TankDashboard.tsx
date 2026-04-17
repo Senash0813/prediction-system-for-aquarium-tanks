@@ -7,6 +7,42 @@ import InsightCard from '@/components/InsightCard';
 import TrendChart from '@/components/TrendChart';
 import PredictiveNotifications from '@/components/PredictiveNotifications';
 import CircularGauge from '@/components/CircularGauge';
+import { type TankStatus } from '@/data/dummyData';
+
+const OXYGEN_BARS: { status: TankStatus; color: string; bgActive: string; glow: string; label: string }[] = [
+  { status: 'safe',     color: 'hsl(152, 60%, 42%)', bgActive: 'rgba(47, 160, 100, 0.15)', glow: 'rgba(47, 160, 100, 0.5)',  label: 'Normal'   },
+  { status: 'warning',  color: 'hsl(38, 92%, 50%)',  bgActive: 'rgba(246, 160, 12, 0.15)', glow: 'rgba(246, 160, 12, 0.5)',  label: 'Moderate' },
+  { status: 'critical', color: 'hsl(0, 72%, 55%)',   bgActive: 'rgba(220, 50, 47, 0.15)',  glow: 'rgba(220, 50, 47, 0.5)',   label: 'Low'      },
+];
+
+const OxygenTrafficLight = ({ status }: { status: TankStatus }) => (
+  <div className="rounded-xl border bg-card shadow-sm animate-fade-in flex flex-col px-4 py-5 w-44 shrink-0">
+    <h4 className="mb-3 text-sm font-semibold text-card-foreground">Dissolved O₂</h4>
+    <div className="flex flex-col gap-2 flex-1 justify-center">
+      {OXYGEN_BARS.map(bar => {
+        const active = status === bar.status;
+        return (
+          <div
+            key={bar.status}
+            className="rounded-lg px-3 py-3 flex items-center justify-center transition-all duration-500"
+            style={{
+              backgroundColor: active ? bar.bgActive : 'hsl(var(--muted))',
+              border: `1px solid ${active ? bar.color : 'transparent'}`,
+              boxShadow: active ? `0 0 8px 2px ${bar.glow}` : 'none',
+            }}
+          >
+            <span
+              className="text-xs font-semibold transition-colors duration-300"
+              style={{ color: active ? bar.color : 'hsl(var(--muted-foreground))' }}
+            >
+              {bar.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
 
 const TankDashboard = () => {
   const { tankId } = useParams<{ tankId: string }>();
@@ -73,13 +109,18 @@ const TankDashboard = () => {
       </div>
 
       {/* Charts */}
-      <TrendChart
-        data={tank.stressHistory}
-        title="Stress Risk Score – Last 24h"
-        status={tank.status}
-        height={250}
-        clickPath={`/tank/${tank.id}/metric/stress`}
-      />
+      <div className="flex items-stretch gap-4">
+        <div className="flex-1 min-w-0">
+          <TrendChart
+            data={tank.stressHistory}
+            title="Stress Risk Score – Last 24h"
+            status={tank.status}
+            height={250}
+            clickPath={`/tank/${tank.id}/metric/stress`}
+          />
+        </div>
+        <OxygenTrafficLight status={tank.oxygenStatus ?? 'safe'} />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <TrendChart

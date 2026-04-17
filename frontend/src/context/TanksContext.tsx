@@ -76,6 +76,14 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     return 'safe';
   };
 
+  // oxygen_estimate: "low_oxygen_risk" → critical, "moderate_risk" → warning, else safe
+  const oxygenStatusFromInsight = (ins: any): TankStatus => {
+    const s = typeof ins?.status === 'string' ? ins.status.toLowerCase() : '';
+    if (s === 'low_oxygen_risk') return 'critical';
+    if (s === 'moderate_risk') return 'warning';
+    return 'safe';
+  };
+
   const worstStatus = (...statuses: TankStatus[]): TankStatus => {
     if (statuses.includes('critical')) return 'critical';
     if (statuses.includes('warning')) return 'warning';
@@ -93,16 +101,18 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     const chemIns    = byType('water_chemistry');
     const filterIns  = byType('filter_health');
     const riskIns    = byType('fish_stress_risk');
+    const oxygenIns  = byType('oxygen_estimate');
 
     const tempStatus   = tempIns   ? tempStatusFromInsight(tempIns)       : 'safe' as TankStatus;
     const phStatus     = chemIns   ? phStatusFromInsight(chemIns)         : 'safe' as TankStatus;
     const turbStatus   = filterIns ? turbidityStatusFromInsight(filterIns) : 'safe' as TankStatus;
     const stressStatus = riskIns   ? stressStatusFromInsight(riskIns)     : 'safe' as TankStatus;
+    const oxygenStatus = oxygenIns ? oxygenStatusFromInsight(oxygenIns)   : 'safe' as TankStatus;
     const overallStatus = worstStatus(tempStatus, phStatus, turbStatus, stressStatus);
 
     const riskScore = riskIns?.risk_score != null ? Number(riskIns.risk_score) : null;
 
-    return { tempStatus, phStatus, turbStatus, overallStatus, riskScore };
+    return { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus };
   };
 
   const formatBackendTimestampUtc = (ts: any): string => {
@@ -139,6 +149,8 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
         return turbidityStatusFromInsight(ins);     // needs_cleaning→critical, warning→warning
       case 'fish_stress_risk':
         return stressStatusFromInsight(ins);        // HIGH→critical, MODERATE→warning (uses risk_level)
+      case 'oxygen_estimate':
+        return oxygenStatusFromInsight(ins);        // low_oxygen_risk→critical, moderate_risk→warning
       default:
         return mapInsightStatusToSeverity(ins?.status);
     }
@@ -227,7 +239,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
             const nextPh = u.phVal ?? t.ph.value;
             const nextTurb = u.turbVal ?? t.turbidity.value;
 
-            const { tempStatus, phStatus, turbStatus, overallStatus, riskScore } =
+            const { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus } =
               deriveStatusesFromInsights(u.insightsByType);
 
             const nextRisk = riskScore ?? t.stressScore;
@@ -238,6 +250,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
               ...t,
               stressScore: nextRisk,
               status: overallStatus,
+              oxygenStatus,
               temperature: {
                 ...t.temperature,
                 value: nextTemp,
@@ -325,7 +338,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
               const id = colName;
               const prettyName = colName.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 
-              const { tempStatus, phStatus, turbStatus, overallStatus, riskScore } =
+              const { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus } =
                 deriveStatusesFromInsights(insightsByType);
 
               const computedScore = Math.round((phVal + tempVal + turbVal) / 3);
@@ -399,6 +412,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
                 name: prettyName,
                 stressScore: riskScore ?? computedScore,
                 status: overallStatus,
+                oxygenStatus,
                 insight: 'Auto-discovered tank from DB',
                 temperature: {
                   value: tempVal,
