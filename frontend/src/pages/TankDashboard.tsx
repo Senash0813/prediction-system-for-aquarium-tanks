@@ -117,6 +117,7 @@ const TankDashboard = () => {
             status={tank.status}
             height={250}
             clickPath={`/tank/${tank.id}/metric/stress`}
+            stressMode
           />
         </div>
         <OxygenTrafficLight status={tank.oxygenStatus ?? 'safe'} />
@@ -129,12 +130,16 @@ const TankDashboard = () => {
           status={tank.temperature.status}
           unit="°C"
           clickPath={`/tank/${tank.id}/metric/temperature`}
+          safeMin={tank.temperature.safeMin}
+          safeMax={tank.temperature.safeMax}
         />
         <TrendChart
           data={tank.phHistory}
           title="pH Level"
           status={tank.ph.status}
           clickPath={`/tank/${tank.id}/metric/ph`}
+          safeMin={tank.ph.safeMin}
+          safeMax={tank.ph.safeMax}
         />
         <TrendChart
           data={tank.turbidityHistory}
@@ -142,6 +147,8 @@ const TankDashboard = () => {
           status={tank.turbidity.status}
           unit=" NTU"
           clickPath={`/tank/${tank.id}/metric/turbidity`}
+          safeMin={tank.turbidity.safeMin}
+          safeMax={tank.turbidity.safeMax}
         />
       </div>
 
