@@ -20,7 +20,7 @@ def combine_rule_and_ml(
 
     # Never downgrade an alert from the rule engine
     if rule_status == "alert":
-        notes.append("Current rule-based condition is already critical.")
+        notes.append("Current readings already look critical.")
         if is_anomalous:
             notes.append("Recent pattern also appears unusual.")
         return {
@@ -33,7 +33,7 @@ def combine_rule_and_ml(
     if rule_status == "normal" and predicted_future_status in {"warning", "alert"}:
         final_status = "warning"
         final_label = "Predicted Water Chemistry Risk"
-        notes.append("Current readings are acceptable, but the model predicts worsening conditions soon.")
+        notes.append("Current readings are acceptable, but conditions may worsen soon.")
 
     # Upgrade normal -> warning if anomaly seen
     if rule_status == "normal" and is_anomalous:
@@ -44,13 +44,13 @@ def combine_rule_and_ml(
     # Keep warning as warning, but enrich explanation
     if rule_status == "warning":
         if predicted_future_status in {"warning", "alert"}:
-            notes.append("The model predicts the current chemistry stress may continue.")
+            notes.append("This chemistry stress may continue for a while.")
         if is_anomalous:
             notes.append("The recent pattern also appears unusual.")
 
     # Stable future note
     if rule_status == "normal" and predicted_future_status == "normal" and not is_anomalous:
-        notes.append("ML models also suggest near-term water chemistry is likely to remain stable.")
+        notes.append("Near-term water chemistry is likely to remain stable.")
 
     return {
         "final_status": final_status,

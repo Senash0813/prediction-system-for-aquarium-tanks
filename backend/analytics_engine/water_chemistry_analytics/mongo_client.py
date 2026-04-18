@@ -186,6 +186,7 @@ def save_water_chemistry_insight(tank_id: str, insight: dict) -> None:
             "generated_at": generated_at,
             "status": insight.get("status"),
             "message": insight.get("message"),
+            "safe_ranges": insight.get("safe_ranges"),
             "overall": insight.get("overall"),
             "ph": insight.get("ph"),
             "tds": insight.get("tds"),
