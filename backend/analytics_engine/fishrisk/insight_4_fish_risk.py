@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 try:
-    # Package import (used when loaded by FastAPI app)
+    # Package imports (used when loaded by FastAPI app).
     from .settings import (
         TEMP_SAFE_MIN,
         TEMP_SAFE_MAX,
@@ -12,8 +12,9 @@ try:
         TURBIDITY_MODERATE,
         TURBIDITY_HIGH,
     )
+    from .predict_fish_risk import predict_fish_risk
 except ImportError:
-    # Script import (used when file is run directly)
+    # Script imports (used when run directly).
     from settings import (
         TEMP_SAFE_MIN,
         TEMP_SAFE_MAX,
@@ -24,9 +25,12 @@ except ImportError:
         TURBIDITY_MODERATE,
         TURBIDITY_HIGH,
     )
+    from predict_fish_risk import predict_fish_risk
+
 
 def prepare_readings(raw_readings):
     cleaned = []
+
     for r in raw_readings:
         temp = r.get("temperature")
         ph = r.get("ph")
@@ -38,15 +42,19 @@ def prepare_readings(raw_readings):
         if temp is None or ph is None or turb is None or ts is None:
             continue
 
-        cleaned.append({
-            "temperature": float(temp),
-            "ph": float(ph),
-            "turbidity": float(turb),
-            "tds": float(tds) if tds is not None else None,
-            "light": str(light) if light is not None else None,
-            "timestamp": ts,
-        })
+        cleaned.append(
+            {
+                "temperature": float(temp),
+                "ph": float(ph),
+                "turbidity": float(turb),
+                "tds": float(tds) if tds is not None else None,
+                "light": str(light) if light is not None else None,
+                "timestamp": ts,
+            }
+        )
+
     return cleaned
+
 
 def calculate_risk(temp, ph, turb):
     risk = 0
@@ -68,6 +76,7 @@ def calculate_risk(temp, ph, turb):
 
     return risk
 
+
 def risk_to_label(score):
     if score <= 30:
         return "SAFE"
@@ -75,27 +84,33 @@ def risk_to_label(score):
         return "MODERATE"
     return "HIGH"
 
+
 def calculate_trend_features(readings):
     if len(readings) < 2:
         return {
             "temp_change": 0.0,
             "ph_change": 0.0,
             "turb_change": 0.0,
-            "risk_change": 0.0
+            "risk_change": 0.0,
         }
 
     current = readings[-1]
     previous = readings[-2]
 
-    current_risk = calculate_risk(current["temperature"], current["ph"], current["turbidity"])
-    prev_risk = calculate_risk(previous["temperature"], previous["ph"], previous["turbidity"])
+    current_risk = calculate_risk(
+        current["temperature"], current["ph"], current["turbidity"]
+    )
+    prev_risk = calculate_risk(
+        previous["temperature"], previous["ph"], previous["turbidity"]
+    )
 
     return {
         "temp_change": current["temperature"] - previous["temperature"],
         "ph_change": current["ph"] - previous["ph"],
         "turb_change": current["turbidity"] - previous["turbidity"],
-        "risk_change": current_risk - prev_risk
+        "risk_change": current_risk - prev_risk,
     }
+
 
 def detect_stress_trend(trend):
     trend_score = 0
@@ -116,6 +131,7 @@ def detect_stress_trend(trend):
     elif trend_score <= -1:
         return "Decreasing"
     return "Stable"
+
 
 def detect_causes(current, trend):
     causes = []
@@ -152,6 +168,7 @@ def detect_causes(current, trend):
 
     return causes
 
+
 def suggest_actions(causes):
     actions = []
 
@@ -163,7 +180,12 @@ def suggest_actions(causes):
         actions.append("check filtration and reduce feeding")
     if "moderate turbidity" in causes:
         actions.append("monitor tank cleanliness and water clarity")
-    if "low pH" in causes or "high pH" in causes or "rising pH" in causes or "falling pH" in causes:
+    if (
+        "low pH" in causes
+        or "high pH" in causes
+        or "rising pH" in causes
+        or "falling pH" in causes
+    ):
         actions.append("adjust pH gradually to avoid stressing the fish")
 
     if not actions:
@@ -171,11 +193,34 @@ def suggest_actions(causes):
 
     return actions
 
-def build_message(risk_level, stress_trend, causes):
+
+def build_current_message(risk_level, stress_trend, causes):
     if causes:
         cause_text = ", ".join(causes)
-        return f"Fish stress risk is {risk_level} and {stress_trend.lower()} due to {cause_text}."
-    return f"Fish stress risk is {risk_level} and {stress_trend.lower()}."
+        return (
+            f"Current fish stress risk is {risk_level} and "
+            f"{stress_trend.lower()} due to {cause_text}."
+        )
+    return f"Current fish stress risk is {risk_level} and {stress_trend.lower()}."
+
+
+def build_combined_message(current_assessment, prediction_30min):
+    current_msg = (
+        f"Current fish stress is {current_assessment['risk_level']} "
+        f"and {current_assessment['stress_trend'].lower()}."
+    )
+
+    if prediction_30min and prediction_30min.get("status") == "ok":
+        predicted_level = prediction_30min.get("predicted_risk_level")
+        predicted_trend = prediction_30min.get("predicted_trend", "Stable").lower()
+        prediction_msg = (
+            f" Predicted fish stress in 30 minutes is {predicted_level} "
+            f"and {predicted_trend}."
+        )
+        return current_msg + prediction_msg
+
+    return current_msg
+
 
 def generate_insight(tank_id, raw_readings):
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -185,23 +230,35 @@ def generate_insight(tank_id, raw_readings):
         return {
             "tank_id": tank_id,
             "status": "insufficient_data",
-            "risk_score": None,
-            "risk_level": None,
-            "stress_trend": None,
-            "causes": [],
-            "actions": [],
+            "current_assessment": None,
+            "prediction_30min": None,
             "message": "Not enough readings to generate fish stress insight.",
             "generated_at": generated_at,
         }
 
     current = readings[-1]
-    risk_score = calculate_risk(current["temperature"], current["ph"], current["turbidity"])
+    risk_score = calculate_risk(
+        current["temperature"], current["ph"], current["turbidity"]
+    )
     risk_level = risk_to_label(risk_score)
+
     trend = calculate_trend_features(readings)
     stress_trend = detect_stress_trend(trend)
     causes = detect_causes(current, trend)
     actions = suggest_actions(causes)
-    message = build_message(risk_level, stress_trend, causes)
+
+    current_message = build_current_message(risk_level, stress_trend, causes)
+
+    current_assessment = {
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+        "stress_trend": stress_trend,
+        "causes": causes,
+        "actions": actions,
+        "message": current_message,
+    }
+
+    prediction_30min = predict_fish_risk(readings)
 
     status = "normal"
     if risk_level == "HIGH":
@@ -209,14 +266,24 @@ def generate_insight(tank_id, raw_readings):
     elif risk_level == "MODERATE" or stress_trend == "Increasing":
         status = "warning"
 
+    if prediction_30min and prediction_30min.get("status") == "ok":
+        predicted_level = prediction_30min.get("predicted_risk_level")
+        predicted_trend = prediction_30min.get("predicted_trend")
+
+        if predicted_level == "HIGH":
+            status = "alert"
+        elif status != "alert" and (
+            predicted_level == "MODERATE" or predicted_trend == "Increasing"
+        ):
+            status = "warning"
+
+    combined_message = build_combined_message(current_assessment, prediction_30min)
+
     return {
         "tank_id": tank_id,
         "status": status,
-        "risk_score": risk_score,
-        "risk_level": risk_level,
-        "stress_trend": stress_trend,
-        "causes": causes,
-        "actions": actions,
-        "message": message,
+        "current_assessment": current_assessment,
+        "prediction_30min": prediction_30min,
+        "message": combined_message,
         "generated_at": generated_at,
     }
