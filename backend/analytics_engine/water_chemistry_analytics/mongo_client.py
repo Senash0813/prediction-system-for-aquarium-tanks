@@ -15,7 +15,6 @@ _client = None
 
 
 def get_client() -> MongoClient:
-    """Returns the shared MongoClient, creating it once if needed."""
     global _client
     if _client is None:
         _client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
@@ -23,25 +22,17 @@ def get_client() -> MongoClient:
 
 
 def get_db():
-    """Returns the main aquarium readings database handle."""
     return get_client()[MONGO_DB_NAME]
 
 
 def get_insights_db():
-    """Returns the generated insights database handle."""
     return get_client()[INSIGHTS_DB_NAME]
 
 
 def fetch_recent_readings(tank_id: str, limit: int = TREND_WINDOW_SIZE) -> list[dict]:
     """
-    Fetches the most recent readings for a tank, ordered oldest -> newest.
-
-    Only required fields are fetched:
-    - tank_id
-    - ph
-    - tds
-    - temperature
-    - timestamp
+    Fetches recent readings for current runtime analysis.
+    Ordered oldest -> newest.
     """
     try:
         collection = get_db()[get_tank_collection_name(tank_id)]
@@ -73,20 +64,54 @@ def fetch_recent_readings(tank_id: str, limit: int = TREND_WINDOW_SIZE) -> list[
         raise RuntimeError(f"[mongo_client] Query failed for {tank_id}: {e}")
 
 
+def fetch_all_readings_for_tank(tank_id: str) -> list[dict]:
+    """
+    Fetches all cleaned readings for one tank.
+    Used for ML training.
+    Ordered oldest -> newest.
+    """
+    try:
+        collection = get_db()[get_tank_collection_name(tank_id)]
+
+        cursor = (
+            collection
+            .find(
+                {},
+                {
+                    "_id": 0,
+                    "tank_id": 1,
+                    "ph": 1,
+                    "tds": 1,
+                    "temperature": 1,
+                    "timestamp": 1,
+                }
+            )
+            .sort("timestamp", ASCENDING)
+        )
+
+        return list(cursor)
+
+    except ConnectionFailure as e:
+        raise RuntimeError(f"[mongo_client] Could not connect to MongoDB: {e}")
+    except OperationFailure as e:
+        raise RuntimeError(f"[mongo_client] Query failed for {tank_id}: {e}")
+
+
 def get_all_tank_ids() -> list[str]:
     """
-    Returns all tank collections from the cleaned readings database.
+    Returns all cleaned tank collections.
+    Excludes tank_config.
     """
     try:
         all_collections = get_db().list_collection_names()
-        return [name for name in all_collections if name.startswith("tank_") and name != "tank_config"]
+        return [name for name in all_collections if name.startswith("tank_") and name not in {"tank_config", "tank_state"}]
     except Exception as e:
         raise RuntimeError(f"[mongo_client] Could not list collections: {e}")
 
 
 def save_water_chemistry_insight(tank_id: str, insight: dict) -> None:
     """
-    Saves a generated water chemistry insight to generated_insights.<tank_id>
+    Saves hybrid water chemistry insight to generated_insights.<tank_id>
     """
     try:
         collection = get_insights_db()[tank_id]
@@ -112,6 +137,9 @@ def save_water_chemistry_insight(tank_id: str, insight: dict) -> None:
             "temperature": insight.get("temperature"),
             "diagnosis": insight.get("diagnosis"),
             "recommendation": insight.get("recommendation"),
+            "ml_prediction": insight.get("ml_prediction"),
+            "ml_anomaly": insight.get("ml_anomaly"),
+            "hybrid_decision": insight.get("hybrid_decision"),
         }
 
         collection.insert_one(document)
@@ -123,7 +151,6 @@ def save_water_chemistry_insight(tank_id: str, insight: dict) -> None:
 
 
 def close_connection():
-    """Closes MongoDB connection cleanly."""
     global _client
     if _client is not None:
         _client.close()

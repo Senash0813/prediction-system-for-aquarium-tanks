@@ -240,7 +240,7 @@ def _get_all_tank_ids(prefix: str = "tank_") -> list[str]:
 
     db = _get_readings_db()
     collection_names = db.list_collection_names()
-    return [name for name in collection_names if name.startswith(prefix) and name != "tank_config"]
+    return [name for name in collection_names if name.startswith(prefix) and name not in {"tank_config", "tank_state"}]
 
 
 def _get_latest_reading_collection(tank_id: Optional[str] = None):

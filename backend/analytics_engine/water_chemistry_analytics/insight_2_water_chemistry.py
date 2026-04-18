@@ -15,6 +15,9 @@ from .settings import (
     TDS_CHANGE_RATE_THRESHOLD,
     TEMP_CHANGE_RATE_THRESHOLD,
 )
+from .ml_predictor import predict_future
+from .anomaly_detector import detect_anomaly
+from .hybrid_decision import combine_rule_and_ml
 
 
 # ============================================================
@@ -22,18 +25,6 @@ from .settings import (
 # ============================================================
 
 def prepare_readings(raw_readings: list[dict]) -> list[dict]:
-    """
-    Validates and normalises raw readings from MongoDB.
-    Discards any reading missing ph, tds, temperature, or timestamp.
-
-    Returns cleaned list of dicts:
-    {
-        "ph": float,
-        "tds": float,
-        "temperature": float,
-        "timestamp": datetime
-    }
-    """
     cleaned = []
 
     for r in raw_readings:
@@ -66,14 +57,6 @@ def prepare_readings(raw_readings: list[dict]) -> list[dict]:
 # ============================================================
 
 def calculate_numeric_trend(readings: list[dict], field: str, threshold: float) -> dict:
-    """
-    Calculates trend for a numeric field using simple linear regression.
-
-    Args:
-        readings : prepared readings ordered oldest -> newest
-        field    : "ph" | "tds" | "temperature"
-        threshold: minimum slope magnitude to count as rising/dropping
-    """
     if not readings:
         return {
             "field": field,
@@ -137,15 +120,6 @@ def calculate_numeric_trend(readings: list[dict], field: str, threshold: float) 
 # ============================================================
 
 def analyze_ph(readings: list[dict]) -> dict:
-    """
-    Evaluates pH condition and trend.
-
-    Severity:
-        0 = normal
-        1 = monitor
-        2 = warning
-        3 = critical
-    """
     trend = calculate_numeric_trend(readings, "ph", PH_CHANGE_RATE_THRESHOLD)
     current = trend["current"]
 
@@ -180,15 +154,6 @@ def analyze_ph(readings: list[dict]) -> dict:
 
 
 def analyze_tds(readings: list[dict]) -> dict:
-    """
-    Evaluates TDS condition and trend.
-
-    Severity:
-        0 = normal
-        1 = monitor
-        2 = warning
-        3 = critical
-    """
     trend = calculate_numeric_trend(readings, "tds", TDS_CHANGE_RATE_THRESHOLD)
     current = trend["current"]
 
@@ -223,14 +188,6 @@ def analyze_tds(readings: list[dict]) -> dict:
 
 
 def analyze_temperature(readings: list[dict]) -> dict:
-    """
-    Evaluates temperature condition and trend as part of overall water chemistry.
-
-    Severity:
-        0 = normal
-        1 = monitor
-        2 = warning
-    """
     trend = calculate_numeric_trend(readings, "temperature", TEMP_CHANGE_RATE_THRESHOLD)
     current = trend["current"]
 
@@ -263,17 +220,6 @@ def analyze_temperature(readings: list[dict]) -> dict:
 # ============================================================
 
 def evaluate_water_chemistry(ph_analysis: dict, tds_analysis: dict, temp_analysis: dict) -> dict:
-    """
-    Main rule engine for aquarium water chemistry.
-
-    Returns:
-        {
-            "status": "alert" | "warning" | "normal",
-            "overall_label": str,
-            "severity": int,
-            "triggered_rules": list[str]
-        }
-    """
     triggered_rules = []
 
     severity = max(
@@ -286,7 +232,6 @@ def evaluate_water_chemistry(ph_analysis: dict, tds_analysis: dict, temp_analysi
     tds_status = tds_analysis["status"]
     temp_status = temp_analysis["status"]
 
-    # 1. Severe degradation
     if (
         ph_analysis["severity"] >= 2
         and tds_analysis["severity"] >= 2
@@ -295,27 +240,22 @@ def evaluate_water_chemistry(ph_analysis: dict, tds_analysis: dict, temp_analysi
         triggered_rules.append("severe_water_quality_degradation")
         severity = max(severity, 3)
 
-    # 2. Hidden dissolved solids issue
     if ph_status in {"normal", "normal_but_drifting"} and tds_analysis["severity"] >= 2:
         triggered_rules.append("hidden_dissolved_solids_issue")
         severity = max(severity, 2)
 
-    # 3. Acidic stress with dissolved buildup
     if ph_status in {"low", "critically_low"} and tds_analysis["severity"] >= 2:
         triggered_rules.append("acidic_stress_with_dissolved_buildup")
         severity = max(severity, 2)
 
-    # 4. Alkaline mineral-rich water
     if ph_status in {"high", "critically_high"} and tds_analysis["severity"] >= 2:
         triggered_rules.append("alkaline_mineral_rich_water")
         severity = max(severity, 2)
 
-    # 5. Temperature amplified chemistry stress
     if temp_status == "too_hot" and (ph_analysis["severity"] >= 2 or tds_analysis["severity"] >= 2):
         triggered_rules.append("temperature_amplified_chemistry_stress")
         severity = max(severity, 2)
 
-    # 6. Combined chemistry instability
     abnormal_count = sum([
         1 if ph_analysis["severity"] >= 2 else 0,
         1 if tds_analysis["severity"] >= 2 else 0,
@@ -325,12 +265,10 @@ def evaluate_water_chemistry(ph_analysis: dict, tds_analysis: dict, temp_analysi
         triggered_rules.append("combined_chemistry_instability")
         severity = max(severity, 2)
 
-    # 7. Waste buildup pattern
     if tds_analysis["direction"] == "rising" and ph_analysis["direction"] == "dropping":
         triggered_rules.append("waste_buildup_pattern")
         severity = max(severity, 2)
 
-    # 8. Stable but drifting
     if (
         ph_status in {"normal", "normal_but_drifting"}
         and tds_status in {"normal", "normal_but_rising"}
@@ -370,9 +308,6 @@ def evaluate_water_chemistry(ph_analysis: dict, tds_analysis: dict, temp_analysi
 # ============================================================
 
 def diagnose_chemistry_cause(ph_analysis: dict, tds_analysis: dict, temp_analysis: dict, evaluation: dict) -> str:
-    """
-    Produces a user-friendly explanation.
-    """
     rules = set(evaluation["triggered_rules"])
 
     if "severe_water_quality_degradation" in rules:
@@ -418,12 +353,17 @@ def diagnose_chemistry_cause(ph_analysis: dict, tds_analysis: dict, temp_analysi
     return "The tank water is currently stable, and no major chemistry issue is detected."
 
 
-def recommend_action(evaluation: dict, ph_analysis: dict, tds_analysis: dict, temp_analysis: dict) -> str:
-    """
-    Returns a user-friendly action recommendation.
-    """
+def recommend_action(
+    evaluation: dict,
+    ph_analysis: dict,
+    tds_analysis: dict,
+    temp_analysis: dict,
+    hybrid_decision: dict | None = None,
+    ml_prediction: dict | None = None,
+    ml_anomaly: dict | None = None,
+) -> str:
     rules = set(evaluation["triggered_rules"])
-    status = evaluation["status"]
+    status = hybrid_decision["final_status"] if hybrid_decision else evaluation["status"]
 
     if status == "alert":
         return (
@@ -449,14 +389,14 @@ def recommend_action(evaluation: dict, ph_analysis: dict, tds_analysis: dict, te
             "Keeping the tank closer to the ideal temperature may reduce stress on the fish."
         )
 
+    if hybrid_decision and hybrid_decision["final_status"] == "warning":
+        return (
+            "The tank is acceptable right now, but the recent pattern suggests it should be watched closely over the next few readings."
+        )
+
     if "stable_but_drifting" in rules:
         return (
             "No immediate action is needed, but continue monitoring the tank because the readings are gradually drifting."
-        )
-
-    if status == "warning":
-        return (
-            "Monitor the tank again soon and see whether the readings continue in the same direction."
         )
 
     return "No immediate action is needed. Continue normal tank monitoring."
@@ -467,9 +407,6 @@ def recommend_action(evaluation: dict, ph_analysis: dict, tds_analysis: dict, te
 # ============================================================
 
 def generate_insight(tank_id: str, readings: list[dict]) -> dict:
-    """
-    Master function — generates the full water chemistry insight.
-    """
     generated_at = datetime.now(timezone.utc).isoformat()
     readings = prepare_readings(readings)
 
@@ -485,6 +422,9 @@ def generate_insight(tank_id: str, readings: list[dict]) -> dict:
             "temperature": None,
             "diagnosis": None,
             "recommendation": None,
+            "ml_prediction": None,
+            "ml_anomaly": None,
+            "hybrid_decision": None,
             "generated_at": generated_at,
         }
 
@@ -493,17 +433,73 @@ def generate_insight(tank_id: str, readings: list[dict]) -> dict:
     temp_analysis = analyze_temperature(readings)
 
     evaluation = evaluate_water_chemistry(ph_analysis, tds_analysis, temp_analysis)
+
+    ml_prediction = None
+    ml_anomaly = None
+    hybrid_decision = None
+
+    try:
+        ml_prediction = predict_future(readings)
+    except Exception:
+        ml_prediction = {
+            "predicted_ph": None,
+            "predicted_tds": None,
+            "predicted_temperature": None,
+            "predicted_future_status": None,
+        }
+
+    try:
+        ml_anomaly = detect_anomaly(readings)
+    except Exception:
+        ml_anomaly = {
+            "is_anomalous": False,
+            "score": 0.0,
+        }
+
+    if ml_prediction and ml_prediction.get("predicted_future_status"):
+        hybrid_decision = combine_rule_and_ml(
+            rule_status=evaluation["status"],
+            rule_label=evaluation["overall_label"],
+            rule_severity=evaluation["severity"],
+            ml_prediction=ml_prediction,
+            ml_anomaly=ml_anomaly,
+        )
+    else:
+        hybrid_decision = {
+            "final_status": evaluation["status"],
+            "final_label": evaluation["overall_label"],
+            "notes": [],
+        }
+
     diagnosis = diagnose_chemistry_cause(ph_analysis, tds_analysis, temp_analysis, evaluation)
-    recommendation = recommend_action(evaluation, ph_analysis, tds_analysis, temp_analysis)
-    message = _build_message(evaluation, ph_analysis, tds_analysis, temp_analysis, diagnosis)
+    diagnosis = _append_ml_context(diagnosis, ml_prediction, ml_anomaly, hybrid_decision)
+
+    recommendation = recommend_action(
+        evaluation,
+        ph_analysis,
+        tds_analysis,
+        temp_analysis,
+        hybrid_decision=hybrid_decision,
+        ml_prediction=ml_prediction,
+        ml_anomaly=ml_anomaly,
+    )
+
+    message = _build_message(
+        evaluation,
+        ph_analysis,
+        tds_analysis,
+        temp_analysis,
+        diagnosis,
+        hybrid_decision,
+    )
 
     return {
         "tank_id": tank_id,
         "insight_type": "water_chemistry",
-        "status": evaluation["status"],
+        "status": hybrid_decision["final_status"],
         "message": message,
         "overall": {
-            "label": evaluation["overall_label"],
+            "label": hybrid_decision["final_label"],
             "severity": evaluation["severity"],
             "triggered_rules": evaluation["triggered_rules"],
         },
@@ -512,8 +508,40 @@ def generate_insight(tank_id: str, readings: list[dict]) -> dict:
         "temperature": temp_analysis,
         "diagnosis": diagnosis,
         "recommendation": recommendation,
+        "ml_prediction": ml_prediction,
+        "ml_anomaly": ml_anomaly,
+        "hybrid_decision": hybrid_decision,
         "generated_at": generated_at,
     }
+
+
+def _append_ml_context(
+    diagnosis: str,
+    ml_prediction: dict | None,
+    ml_anomaly: dict | None,
+    hybrid_decision: dict | None,
+) -> str:
+    parts = [diagnosis]
+
+    if ml_prediction and ml_prediction.get("predicted_future_status"):
+        pred_status = ml_prediction["predicted_future_status"]
+        pred_ph = ml_prediction.get("predicted_ph")
+        pred_tds = ml_prediction.get("predicted_tds")
+        pred_temp = ml_prediction.get("predicted_temperature")
+
+        parts.append(
+            f"The ML model predicts near-future readings around pH {pred_ph}, "
+            f"TDS {pred_tds} ppm, and temperature {pred_temp}°C, "
+            f"with an expected future status of {pred_status}."
+        )
+
+    if ml_anomaly and ml_anomaly.get("is_anomalous"):
+        parts.append("The recent pattern also looks unusual compared to normal tank behavior.")
+
+    if hybrid_decision and hybrid_decision.get("notes"):
+        parts.append(" ".join(hybrid_decision["notes"]))
+
+    return " ".join(parts)
 
 
 def _build_message(
@@ -522,23 +550,24 @@ def _build_message(
     tds_analysis: dict,
     temp_analysis: dict,
     diagnosis: str,
+    hybrid_decision: dict,
 ) -> str:
-    """
-    Builds a user-friendly final message.
-    """
     ph_str = f"{ph_analysis['current']:.2f}"
     tds_str = f"{tds_analysis['current']:.1f}"
     temp_str = f"{temp_analysis['current']:.1f}°C"
 
-    if evaluation["status"] == "alert":
+    final_status = hybrid_decision["final_status"]
+    final_label = hybrid_decision["final_label"]
+
+    if final_status == "alert":
         prefix = "🚨 Alert"
-    elif evaluation["status"] == "warning":
+    elif final_status == "warning":
         prefix = "⚠️ Warning"
     else:
         prefix = "✅ Status"
 
     return (
-        f"{prefix}: {evaluation['overall_label']}. "
+        f"{prefix}: {final_label}. "
         f"Current readings are pH {ph_str}, TDS {tds_str} ppm, and temperature {temp_str}. "
         f"{diagnosis}"
     )

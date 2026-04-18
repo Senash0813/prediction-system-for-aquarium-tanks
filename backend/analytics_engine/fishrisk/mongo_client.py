@@ -43,12 +43,7 @@ def get_insights_db():
 
 def get_all_tank_ids():
     all_collections = get_db().list_collection_names()
-    return [
-        name
-        for name in all_collections
-        if name.startswith("tank_") and name not in {"tank_config", "tank_state"}
-    ]
-
+    return [name for name in all_collections if name.startswith("tank_") and name not in {"tank_config", "tank_state"}]
 
 def fetch_recent_readings(tank_id: str, limit: int = TREND_WINDOW_SIZE):
     collection = get_db()[get_tank_collection_name(tank_id)]
