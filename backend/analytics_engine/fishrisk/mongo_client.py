@@ -1,10 +1,28 @@
 from datetime import datetime
+
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.errors import ConnectionFailure, OperationFailure
-from settings import (
-    MONGO_URI, MONGO_DB_NAME, INSIGHTS_DB_NAME,
-    INSIGHTS_TTL_SECONDS, TREND_WINDOW_SIZE, get_tank_collection_name
-)
+
+try:
+    # Package import (used when loaded by FastAPI app)
+    from .settings import (
+        MONGO_URI,
+        MONGO_DB_NAME,
+        INSIGHTS_DB_NAME,
+        INSIGHTS_TTL_SECONDS,
+        TREND_WINDOW_SIZE,
+        get_tank_collection_name,
+    )
+except ImportError:
+    # Script import (used when file is run directly)
+    from settings import (
+        MONGO_URI,
+        MONGO_DB_NAME,
+        INSIGHTS_DB_NAME,
+        INSIGHTS_TTL_SECONDS,
+        TREND_WINDOW_SIZE,
+        get_tank_collection_name,
+    )
 
 _client = None
 

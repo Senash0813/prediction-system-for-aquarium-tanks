@@ -1,12 +1,14 @@
 import { useNavigate } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceArea, ReferenceLine } from 'recharts';
 import { type TimePoint, type TankStatus } from '@/data/dummyData';
 
-const chartColors: Record<TankStatus, string> = {
+const STATUS_COLORS: Record<TankStatus, string> = {
   safe: 'hsl(152, 60%, 42%)',
   warning: 'hsl(38, 92%, 50%)',
   critical: 'hsl(0, 72%, 55%)',
 };
+
+const NEUTRAL_COLOR = 'hsl(217, 91%, 60%)';
 
 interface TrendChartProps {
   data: TimePoint[];
@@ -15,11 +17,28 @@ interface TrendChartProps {
   height?: number;
   clickPath?: string;
   unit?: string;
+  safeMin?: number;
+  safeMax?: number;
+  stressMode?: boolean;
 }
 
-const TrendChart = ({ data, title, status, height = 200, clickPath, unit }: TrendChartProps) => {
+const TrendChart = ({ data, title, status, height = 200, clickPath, unit, safeMin, safeMax, stressMode = false }: TrendChartProps) => {
   const navigate = useNavigate();
-  const color = chartColors[status];
+  const hasThresholds = safeMin != null && safeMax != null;
+  const color = (hasThresholds || stressMode) ? NEUTRAL_COLOR : STATUS_COLORS[status];
+
+  const crossingIndices = (() => {
+    const indices = new Set<number>();
+    if (!hasThresholds || data.length < 2) return indices;
+    const inRange = (v: number) => v >= safeMin! && v <= safeMax!;
+    for (let i = 1; i < data.length; i++) {
+      if (inRange(data[i].value) !== inRange(data[i - 1].value)) {
+        indices.add(i - 1);
+        indices.add(i);
+      }
+    }
+    return indices;
+  })();
 
   const isIsoLike = (v: any) => {
     if (typeof v !== 'string') return false;
@@ -81,7 +100,22 @@ const TrendChart = ({ data, title, status, height = 200, clickPath, unit }: Tren
             tickLine={false}
             axisLine={false}
             width={40}
+            domain={
+              stressMode ? [0, 100] :
+              hasThresholds
+                ? [
+                    (dataMin: number) => +Math.min(dataMin, safeMin! * (safeMin! >= 0 ? 0.97 : 1.03)).toFixed(2),
+                    (dataMax: number) => +Math.max(dataMax, safeMax! * (safeMax! >= 0 ? 1.03 : 0.97)).toFixed(2),
+                  ]
+                : ['auto', 'auto']
+            }
           />
+          {stressMode && (
+            <ReferenceLine y={40} stroke="hsl(38, 92%, 50%)" strokeDasharray="5 3" strokeWidth={1.5} />
+          )}
+          {stressMode && (
+            <ReferenceLine y={70} stroke="hsl(0, 72%, 55%)" strokeDasharray="5 3" strokeWidth={1.5} />
+          )}
           <Tooltip
             contentStyle={{
               background: 'hsl(var(--card))',
@@ -92,13 +126,32 @@ const TrendChart = ({ data, title, status, height = 200, clickPath, unit }: Tren
             formatter={(value: number) => [`${value}${unit || ''}`, title]}
             labelFormatter={(label: any) => formatTimeTick(label)}
           />
+          {hasThresholds && (
+            <ReferenceArea
+              y1={safeMin}
+              y2={safeMax}
+              fill="hsl(152, 60%, 42%)"
+              fillOpacity={0.08}
+              stroke="hsl(152, 60%, 42%)"
+              strokeOpacity={0.3}
+              strokeDasharray="4 2"
+            />
+          )}
           <Line
             type="monotone"
             dataKey="value"
             stroke={color}
             strokeWidth={2}
-            dot={false}
             activeDot={{ r: 4, fill: color }}
+            dot={(dotProps: any) => {
+              const { cx, cy, index } = dotProps;
+              if (!hasThresholds || !crossingIndices.has(index)) return <g key={index} />;
+              const v = data[index]?.value;
+              const dotColor = (v > safeMax!) || (v < safeMin!)
+                ? (status === 'critical' ? 'hsl(0, 72%, 55%)' : 'hsl(38, 92%, 50%)')
+                : color;
+              return <circle key={index} cx={cx} cy={cy} r={3} fill={dotColor} stroke="hsl(var(--card))" strokeWidth={1.5} />;
+            }}
           />
         </LineChart>
       </ResponsiveContainer>

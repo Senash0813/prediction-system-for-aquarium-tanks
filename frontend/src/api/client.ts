@@ -25,6 +25,16 @@ export interface TankConfigPayload {
   };
 }
 
+export async function deleteTankConfig(tankId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/tank-config/${encodeURIComponent(tankId)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to delete tank: ${text}`);
+  }
+}
+
 export async function saveTankConfig(payload: TankConfigPayload): Promise<void> {
   const res = await fetch(`${API_BASE}/api/tank-config`, {
     method: 'POST',
@@ -127,6 +137,20 @@ export async function sendChatMessage(
   }
   const data = await res.json();
   return data.reply as string;
+}
+
+export async function getTankConfig(collectionName: string): Promise<{
+  tank_id: string;
+  safe_ranges: Record<string, { min: number; max: number }>;
+} | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/tank-config/${encodeURIComponent(collectionName)}`);
+    if (res.status === 404) return null;
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function getReadingsHistory(

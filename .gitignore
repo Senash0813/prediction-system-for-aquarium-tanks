@@ -5,6 +5,7 @@ backend/raw_generator/__pycache__/
 backend/api/__pycache__/
 backend/analytics_engine/water_chemistry_analytics/__pycache__/
 backend/analytics_engine/temperature_stability/__pycache__/
+backend/analytics_engine/fishrisk/__pycache__/
 
 other_codes/.env
 

@@ -62,9 +62,13 @@ const TankCard = ({ tank }: { tank: Tank }) => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                deleteTank(tank.id);
-                toast.success(`${tank.name} has been deleted`);
+              onClick={async () => {
+                try {
+                  await deleteTank(tank.id);
+                  toast.success(`${tank.name} has been deleted`);
+                } catch (err: any) {
+                  toast.error(`Failed to delete tank: ${err?.message ?? 'Unknown error'}`);
+                }
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
