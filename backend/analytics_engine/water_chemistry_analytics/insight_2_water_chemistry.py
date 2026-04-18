@@ -1,16 +1,10 @@
 from datetime import datetime, timezone
 
 from .settings import (
-    PH_SAFE_MIN,
-    PH_SAFE_MAX,
     PH_CRITICAL_LOW,
     PH_CRITICAL_HIGH,
-    TDS_SAFE_MIN,
-    TDS_SAFE_MAX,
     TDS_WARNING_MAX,
     TDS_CRITICAL_MAX,
-    TEMPERATURE_SAFE_MIN,
-    TEMPERATURE_SAFE_MAX,
     PH_CHANGE_RATE_THRESHOLD,
     TDS_CHANGE_RATE_THRESHOLD,
     TEMP_CHANGE_RATE_THRESHOLD,
@@ -119,7 +113,7 @@ def calculate_numeric_trend(readings: list[dict], field: str, threshold: float) 
 # SECTION 3 — Individual Parameter Evaluation
 # ============================================================
 
-def analyze_ph(readings: list[dict]) -> dict:
+def analyze_ph(readings: list[dict], *, safe_min: float, safe_max: float) -> dict:
     trend = calculate_numeric_trend(readings, "ph", PH_CHANGE_RATE_THRESHOLD)
     current = trend["current"]
 
@@ -129,13 +123,13 @@ def analyze_ph(readings: list[dict]) -> dict:
     if current < PH_CRITICAL_LOW:
         status = "critically_low"
         severity = 3
-    elif current < PH_SAFE_MIN:
+    elif current < safe_min:
         status = "low"
         severity = 2
     elif current > PH_CRITICAL_HIGH:
         status = "critically_high"
         severity = 3
-    elif current > PH_SAFE_MAX:
+    elif current > safe_max:
         status = "high"
         severity = 2
     else:
@@ -153,7 +147,7 @@ def analyze_ph(readings: list[dict]) -> dict:
     }
 
 
-def analyze_tds(readings: list[dict]) -> dict:
+def analyze_tds(readings: list[dict], *, safe_min: float, safe_max: float) -> dict:
     trend = calculate_numeric_trend(readings, "tds", TDS_CHANGE_RATE_THRESHOLD)
     current = trend["current"]
 
@@ -166,10 +160,10 @@ def analyze_tds(readings: list[dict]) -> dict:
     elif current > TDS_WARNING_MAX:
         status = "very_high"
         severity = 2
-    elif current > TDS_SAFE_MAX:
+    elif current > safe_max:
         status = "high"
         severity = 2
-    elif current < TDS_SAFE_MIN:
+    elif current < safe_min:
         status = "low"
         severity = 1
     else:
@@ -187,17 +181,17 @@ def analyze_tds(readings: list[dict]) -> dict:
     }
 
 
-def analyze_temperature(readings: list[dict]) -> dict:
+def analyze_temperature(readings: list[dict], *, safe_min: float, safe_max: float) -> dict:
     trend = calculate_numeric_trend(readings, "temperature", TEMP_CHANGE_RATE_THRESHOLD)
     current = trend["current"]
 
     if current is None:
         return {**trend, "status": "unknown", "severity": 0}
 
-    if current < TEMPERATURE_SAFE_MIN:
+    if current < safe_min:
         status = "too_cold"
         severity = 2
-    elif current > TEMPERATURE_SAFE_MAX:
+    elif current > safe_max:
         status = "too_hot"
         severity = 2
     else:
@@ -406,7 +400,7 @@ def recommend_action(
 # SECTION 6 — Final Output
 # ============================================================
 
-def generate_insight(tank_id: str, readings: list[dict]) -> dict:
+def generate_insight(tank_id: str, readings: list[dict], safe_ranges: dict) -> dict:
     generated_at = datetime.now(timezone.utc).isoformat()
     readings = prepare_readings(readings)
 
@@ -428,9 +422,13 @@ def generate_insight(tank_id: str, readings: list[dict]) -> dict:
             "generated_at": generated_at,
         }
 
-    ph_analysis = analyze_ph(readings)
-    tds_analysis = analyze_tds(readings)
-    temp_analysis = analyze_temperature(readings)
+    ph_safe = safe_ranges.get("ph", {})
+    tds_safe = safe_ranges.get("tds", {})
+    temp_safe = safe_ranges.get("temperature", {})
+
+    ph_analysis = analyze_ph(readings, safe_min=float(ph_safe.get("min")), safe_max=float(ph_safe.get("max")))
+    tds_analysis = analyze_tds(readings, safe_min=float(tds_safe.get("min")), safe_max=float(tds_safe.get("max")))
+    temp_analysis = analyze_temperature(readings, safe_min=float(temp_safe.get("min")), safe_max=float(temp_safe.get("max")))
 
     evaluation = evaluate_water_chemistry(ph_analysis, tds_analysis, temp_analysis)
 
