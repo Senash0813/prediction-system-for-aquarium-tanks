@@ -104,7 +104,7 @@ def get_all_tank_ids() -> list[str]:
     """
     try:
         all_collections = get_db().list_collection_names()
-        return [name for name in all_collections if name.startswith("tank_") and name != "tank_config"]
+        return [name for name in all_collections if name.startswith("tank_") and name not in {"tank_config", "tank_state"}]
     except Exception as e:
         raise RuntimeError(f"[mongo_client] Could not list collections: {e}")
 

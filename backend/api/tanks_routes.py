@@ -24,7 +24,7 @@ def list_tanks():
         client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
         db = client[DATABASE_NAME]
         collections = db.list_collection_names()
-        tanks = [name for name in collections if name.startswith("tank_") and name != "tank_config"]
+        tanks = [name for name in collections if name.startswith("tank_") and name not in {"tank_config", "tank_state"}]
         return {"tanks": tanks}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
