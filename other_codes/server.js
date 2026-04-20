@@ -13,7 +13,7 @@ app.use(express.json());
 // MongoDB Connection
 // ==============================
 mongoose
-  .connect(process.env.MONGODB_URI, { dbName: "aqua_guard_db" })
+  .connect(process.env.MONGODB_URI, { dbName: "aqua_gaurd_db" })
   .then(() => console.log("MongoDB connected to aqua_guard_db"))
   .catch((err) => console.error("MongoDB connection error:", err));
 
