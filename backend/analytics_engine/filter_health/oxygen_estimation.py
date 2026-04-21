@@ -240,7 +240,7 @@ def _get_all_tank_ids(prefix: str = "tank_") -> list[str]:
 
     db = _get_readings_db()
     collection_names = db.list_collection_names()
-    return [name for name in collection_names if name.startswith(prefix) and name not in {"tank_config", "tank_state"}]
+    return [name for name in collection_names if name.startswith(prefix) and name != "tank_config"]
 
 
 def _get_latest_reading_collection(tank_id: Optional[str] = None):
@@ -384,6 +384,12 @@ def generate_oxygen_insights() -> Dict[str, Any]:
                 skipped_tanks.append(tank_id)
                 continue
             raise
+        except (TypeError, ValueError) as exc:
+            # Skip tanks with incomplete/invalid numeric fields (e.g., None values).
+            if "float() argument must be a string or a real number" in str(exc):
+                skipped_tanks.append(tank_id)
+                continue
+            raise
 
     return {
         "inserted_count": inserted_count,
@@ -418,7 +424,8 @@ def start_periodic_oxygen_insights(interval_seconds: float = 30.0) -> None:
                         f"tanks={summary['tanks']} "
                         f"at={summary['generated_at']}")
             except Exception as exc:
-                print(f"[oxygen] insight generation failed: {exc}")
+                if "float() argument must be a string or a real number" not in str(exc):
+                    print(f"[oxygen] insight generation failed: {exc}")
             time.sleep(interval_seconds)
 
     thread = threading.Thread(target=_worker, name="oxygen-insights", daemon=True)

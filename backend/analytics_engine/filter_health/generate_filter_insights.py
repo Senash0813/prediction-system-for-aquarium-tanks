@@ -10,10 +10,12 @@ from pymongo import MongoClient
 
 try:
     # Package import (used when loaded by FastAPI app).
-    from .rule_filterhealth import get_filter_health_for_all_tanks
+    from .rule_filterhealth import fetch_last_n_readings_from_mongo, get_filter_health_for_all_tanks
+    from .train_filter_health_model import MODEL_PATH, predict_filter_health_from_history
 except ImportError:
     # Script import (used when file is run directly).
-    from rule_filterhealth import get_filter_health_for_all_tanks
+    from rule_filterhealth import fetch_last_n_readings_from_mongo, get_filter_health_for_all_tanks
+    from train_filter_health_model import MODEL_PATH, predict_filter_health_from_history
 
 
 _insights_thread_lock = threading.Lock()
@@ -58,21 +60,49 @@ def _trend_direction_from_delta(turbidity_delta: Any) -> str:
     return "stable"
 
 
-def _filter_health_message(health: str, trend_msg: Any) -> str:
+def _current_situation_sentence(health: str) -> str:
     if health == "OK":
-        return f"Filter appears OK. {trend_msg}" if trend_msg else "Filter appears OK."
-
+        return "Water is clear and stable."
     if health == "Warning":
-        return f"Filter warning: {trend_msg}" if trend_msg else "Filter warning: check the filter soon."
-
-    return (
-        f"Filter likely needs cleaning: {trend_msg}"
-        if trend_msg
-        else "Filter likely needs cleaning based on turbidity pattern."
-    )
+        return "Water is starting to cloud up."
+    if health == "NeedsCleaning":
+        return "Water is very cloudy and the filter likely needs cleaning."
+    return "Water quality needs attention."
 
 
-def _build_filter_health_insight(tank_id: str, info: Dict[str, Any]) -> Dict[str, Any]:
+def _prediction_sentence(health: str, prediction: str) -> str:
+    if prediction == "NeedsCleaningSoon":
+        if health == "OK":
+            return "Water is stable now, but early signs suggest cleaning may be needed soon."
+        if health == "Warning":
+            return "Cleaning should be scheduled soon."
+        return "Cleaning is recommended soon."
+
+    if prediction == "OK":
+        if health == "NeedsCleaning":
+            return "The filter still needs attention, so monitor it closely."
+        if health == "Warning":
+            return "No immediate cleaning is needed, but keep monitoring the trend."
+        return "No cleaning is needed right now."
+
+    return "Keep monitoring for changes in turbidity."
+
+
+def _build_hybrid_message(health: str, prediction: str) -> str:
+    return f"{_current_situation_sentence(health)} {_prediction_sentence(health, prediction)}"
+
+
+def _predict_filter_health_for_tank(tank_id: str, n: int = 10) -> str:
+    try:
+        df = fetch_last_n_readings_from_mongo(n=n, collection_name=tank_id)
+        history_docs = df.to_dict(orient="records")
+        predictions = predict_filter_health_from_history(history_docs, model_path=MODEL_PATH)
+        return predictions.get(tank_id, "Unknown")
+    except Exception:
+        return "Unknown"
+
+
+def _build_filter_health_insight(tank_id: str, info: Dict[str, Any], prediction: str) -> Dict[str, Any]:
     """Build a single insight document for a tank's filter health.
 
     The shape is similar in spirit to your temperature_stability insight,
@@ -100,8 +130,6 @@ def _build_filter_health_insight(tank_id: str, info: Dict[str, Any]) -> Dict[str
     long_trend_window = 10.0
     increasing_fraction = inc_count / long_trend_window if long_trend_window > 0 else 0.0
 
-    trend_msg = info.get("trend_message")
-
     # Compute simple statistics for the turbidity window.
     if window_turbidity:
         try:
@@ -111,13 +139,14 @@ def _build_filter_health_insight(tank_id: str, info: Dict[str, Any]) -> Dict[str
     else:
         avg_turbidity = None
 
-    message = _filter_health_message(health, trend_msg)
+    message = _build_hybrid_message(health, prediction)
 
     insight: Dict[str, Any] = {
         "insight_type": "filter_health",
         "generated_at": now,
         "status": status,
         "message": message,
+        "prediction": prediction,
         "trend": {
             "trend_direction": trend_direction,
             "turbidity_delta_last": turbidity_delta,
@@ -157,7 +186,8 @@ def generate_filter_health_insights() -> Dict[str, Any]:
     inserted_tanks: list[str] = []
 
     for tank_id, info in all_tanks_info.items():
-        insight_doc = _build_filter_health_insight(tank_id, info)
+        prediction = _predict_filter_health_for_tank(tank_id, n=10)
+        insight_doc = _build_filter_health_insight(tank_id, info, prediction)
 
         # In the generated_insights DB we also keep collections per tank
         # (tank_1, tank_2, ...), matching your example layout.
