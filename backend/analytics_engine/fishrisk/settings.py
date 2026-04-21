@@ -22,7 +22,8 @@ PH_DANGER_MAX = 8.0
 TURBIDITY_MODERATE = 20.0
 TURBIDITY_HIGH = 30.0
 
-MODEL_FILENAME = "fish_risk_model.pkl"
+# Resolve model path from this module directory so backend working directory does not matter.
+MODEL_FILENAME = os.path.join(os.path.dirname(__file__), "fish_risk_model.pkl")
 PREDICTION_HORIZON_MINUTES = 30
 
 # MongoDB stores light as category text, but the ML model was trained with numeric light.
