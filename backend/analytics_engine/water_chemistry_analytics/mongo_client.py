@@ -9,6 +9,12 @@ from .settings import (
     INSIGHTS_TTL_SECONDS,
     get_tank_collection_name,
     TREND_WINDOW_SIZE,
+    PH_SAFE_MIN,
+    PH_SAFE_MAX,
+    TDS_SAFE_MIN,
+    TDS_SAFE_MAX,
+    TEMPERATURE_SAFE_MIN,
+    TEMPERATURE_SAFE_MAX,
 )
 
 _client = None
@@ -97,6 +103,55 @@ def fetch_all_readings_for_tank(tank_id: str) -> list[dict]:
         raise RuntimeError(f"[mongo_client] Query failed for {tank_id}: {e}")
 
 
+def fetch_tank_config(tank_id: str) -> dict:
+    """Fetch per-tank safe ranges from aqua_gaurd_db.tank_config.
+
+    Returns a dict with keys:
+        - ph: {min, max}
+        - tds: {min, max}
+        - temperature: {min, max}
+
+    Falls back to settings defaults if the document (or a field) is missing.
+    """
+    try:
+        collection = get_db()["tank_config"]
+        config = collection.find_one(
+            {"tank_id": tank_id},
+            {
+                "_id": 0,
+                "safe_ranges.ph": 1,
+                "safe_ranges.tds": 1,
+                "safe_ranges.temperature": 1,
+            },
+        )
+
+        safe_ranges = (config or {}).get("safe_ranges", {})
+
+        ph_range = safe_ranges.get("ph", {})
+        tds_range = safe_ranges.get("tds", {})
+        temp_range = safe_ranges.get("temperature", {})
+
+        return {
+            "ph": {
+                "min": float(ph_range.get("min", PH_SAFE_MIN)),
+                "max": float(ph_range.get("max", PH_SAFE_MAX)),
+            },
+            "tds": {
+                "min": float(tds_range.get("min", TDS_SAFE_MIN)),
+                "max": float(tds_range.get("max", TDS_SAFE_MAX)),
+            },
+            "temperature": {
+                "min": float(temp_range.get("min", TEMPERATURE_SAFE_MIN)),
+                "max": float(temp_range.get("max", TEMPERATURE_SAFE_MAX)),
+            },
+        }
+
+    except ConnectionFailure as e:
+        raise RuntimeError(f"[mongo_client] Could not connect to MongoDB: {e}")
+    except OperationFailure as e:
+        raise RuntimeError(f"[mongo_client] Failed to fetch tank config for {tank_id}: {e}")
+
+
 def get_all_tank_ids() -> list[str]:
     """
     Returns all cleaned tank collections.
@@ -131,6 +186,7 @@ def save_water_chemistry_insight(tank_id: str, insight: dict) -> None:
             "generated_at": generated_at,
             "status": insight.get("status"),
             "message": insight.get("message"),
+            "safe_ranges": insight.get("safe_ranges"),
             "overall": insight.get("overall"),
             "ph": insight.get("ph"),
             "tds": insight.get("tds"),

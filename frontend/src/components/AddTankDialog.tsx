@@ -15,16 +15,16 @@ interface AddTankDialogProps {
 
 const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
   const [name, setName] = useState('');
-  const [temperatureMin, setTemperatureMin] = useState('');
-  const [temperatureMax, setTemperatureMax] = useState('');
-  const [phMin, setPhMin] = useState('');
-  const [phMax, setPhMax] = useState('');
+  const [temperatureMin, setTemperatureMin] = useState('24');
+  const [temperatureMax, setTemperatureMax] = useState('30');
+  const [phMin, setPhMin] = useState('6.5');
+  const [phMax, setPhMax] = useState('7.8');
   const [turbidityMin, setTurbidityMin] = useState('');
   const [turbidityMax, setTurbidityMax] = useState('');
   const [lightMin, setLightMin] = useState('');
   const [lightMax, setLightMax] = useState('');
-  const [tdsMin, setTdsMin] = useState('');
-  const [tdsMax, setTdsMax] = useState('');
+  const [tdsMin, setTdsMin] = useState('150');
+  const [tdsMax, setTdsMax] = useState('400');
   const [macAddress, setMacAddress] = useState('');
   const { addTank, tanks } = useTanks();
 
@@ -97,11 +97,11 @@ const AddTankDialog = ({ open, onOpenChange }: AddTankDialogProps) => {
       });
       toast.success(`${trimmedName} has been added`);
       setName('');
-      setTemperatureMin(''); setTemperatureMax('');
-      setPhMin(''); setPhMax('');
+      setTemperatureMin('24'); setTemperatureMax('30');
+      setPhMin('6.5'); setPhMax('7.8');
       setTurbidityMin(''); setTurbidityMax('');
       setLightMin(''); setLightMax('');
-      setTdsMin(''); setTdsMax('');
+      setTdsMin('150'); setTdsMax('400');
       setMacAddress('');
       onOpenChange(false);
     } catch (err: any) {

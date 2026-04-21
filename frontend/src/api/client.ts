@@ -36,8 +36,8 @@ export async function deleteTankConfig(tankId: string): Promise<void> {
 }
 
 export async function saveTankConfig(payload: TankConfigPayload): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/tank-config`, {
-    method: 'POST',
+  const res = await fetch(`${API_BASE}/api/tank-config/${encodeURIComponent(payload.tank_id)}`, {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });

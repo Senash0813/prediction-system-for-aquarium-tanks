@@ -7,6 +7,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from .settings import SCHEDULER_INTERVAL_SECONDS
 from .mongo_client import (
     fetch_recent_readings,
+    fetch_tank_config,
     get_all_tank_ids,
     close_connection,
     save_water_chemistry_insight,
@@ -53,8 +54,10 @@ def _process_tank(tank_id: str):
             logger.warning(f"[{tank_id}] No readings found. Skipping.")
             return
 
+        tank_config = fetch_tank_config(tank_id)
+
         logger.info(f"[{tank_id}] Running hybrid water chemistry insight on {len(readings)} reading(s)...")
-        insight = generate_insight(tank_id, readings)
+        insight = generate_insight(tank_id, readings, tank_config)
 
         save_water_chemistry_insight(tank_id, insight)
         _log_insight(tank_id, insight)
