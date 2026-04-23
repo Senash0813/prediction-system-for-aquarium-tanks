@@ -158,12 +158,34 @@ def get_latest_insights_by_type(collection: str):
             elif msg is not None and not isinstance(msg, str):
                 msg = str(msg)
 
+            oxygen_payload = doc.get("oxygen") if isinstance(doc.get("oxygen"), dict) else {}
+            oxygen_estimated_do = oxygen_payload.get("estimated_do_mgL")
+            oxygen_risk_score = oxygen_payload.get("oxygen_risk_score")
+            oxygen_status = oxygen_payload.get("oxygen_status")
+
+            # Backward-compatible fallback in case older docs store flattened oxygen fields.
+            if oxygen_estimated_do is None:
+                oxygen_estimated_do = doc.get("estimated_do_mgL")
+            if oxygen_risk_score is None:
+                oxygen_risk_score = doc.get("oxygen_risk_score")
+            if oxygen_status is None:
+                oxygen_status = doc.get("oxygen_status")
+
             results.append(
                 {
                     "insight_type": itype,
                     "generated_at": generated_at,
                     "status": doc.get("status"),
                     "message": msg,
+                    "oxygen": {
+                        "estimated_do_mgL": oxygen_estimated_do,
+                        "oxygen_status": oxygen_status,
+                        "oxygen_risk_score": oxygen_risk_score,
+                    } if itype == "oxygen_estimate" else None,
+                    # Also expose flattened oxygen fields for easier frontend consumption.
+                    "estimated_do_mgL": oxygen_estimated_do if itype == "oxygen_estimate" else None,
+                    "oxygen_risk_score": oxygen_risk_score if itype == "oxygen_estimate" else None,
+                    "oxygen_status": oxygen_status if itype == "oxygen_estimate" else None,
                     # water_chemistry: nested per-metric detail
                     "ph": doc.get("ph"),
                     "tds": doc.get("tds"),

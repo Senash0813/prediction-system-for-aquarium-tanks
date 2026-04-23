@@ -9,40 +9,106 @@ import PredictiveNotifications from '@/components/PredictiveNotifications';
 import CircularGauge from '@/components/CircularGauge';
 import { type TankStatus } from '@/data/dummyData';
 
-const OXYGEN_BARS: { status: TankStatus; color: string; bgActive: string; glow: string; label: string }[] = [
-  { status: 'safe',     color: 'hsl(152, 60%, 42%)', bgActive: 'rgba(47, 160, 100, 0.15)', glow: 'rgba(47, 160, 100, 0.5)',  label: 'Normal'   },
-  { status: 'warning',  color: 'hsl(38, 92%, 50%)',  bgActive: 'rgba(246, 160, 12, 0.15)', glow: 'rgba(246, 160, 12, 0.5)',  label: 'Moderate' },
-  { status: 'critical', color: 'hsl(0, 72%, 55%)',   bgActive: 'rgba(220, 50, 47, 0.15)',  glow: 'rgba(220, 50, 47, 0.5)',   label: 'Low'      },
+const OXYGEN_RISK_BANDS = [
+  { key: 'safe' as TankStatus, label: 'Normal', min: 0, max: 25, color: 'hsl(152, 60%, 42%)' },
+  { key: 'warning' as TankStatus, label: 'Moderate', min: 25, max: 50, color: 'hsl(38, 92%, 50%)' },
+  { key: 'critical' as TankStatus, label: 'Low', min: 50, max: 100, color: 'hsl(0, 72%, 55%)' },
 ];
 
-const OxygenTrafficLight = ({ status }: { status: TankStatus }) => (
-  <div className="rounded-xl border bg-card shadow-sm animate-fade-in flex flex-col px-4 py-5 w-44 shrink-0">
-    <h4 className="mb-3 text-sm font-semibold text-card-foreground">Dissolved O₂</h4>
-    <div className="flex flex-col gap-2 flex-1 justify-center">
-      {OXYGEN_BARS.map(bar => {
-        const active = status === bar.status;
-        return (
-          <div
-            key={bar.status}
-            className="rounded-lg px-3 py-3 flex items-center justify-center transition-all duration-500"
-            style={{
-              backgroundColor: active ? bar.bgActive : 'hsl(var(--muted))',
-              border: `1px solid ${active ? bar.color : 'transparent'}`,
-              boxShadow: active ? `0 0 8px 2px ${bar.glow}` : 'none',
-            }}
-          >
+const OXYGEN_THRESHOLD_MARKERS = [25, 50];
+
+const statusTextColor: Record<TankStatus, string> = {
+  safe: 'hsl(152, 60%, 42%)',
+  warning: 'hsl(38, 92%, 50%)',
+  critical: 'hsl(0, 72%, 55%)',
+};
+
+const OxygenRiskGaugeCard = ({ status, oxygenRiskScore }: { status: TankStatus; oxygenRiskScore?: number }) => {
+  const size = 120;
+  const strokeWidth = 10;
+  const segmentGap = 4;
+  const center = size / 2;
+  const radius = (size - strokeWidth * 2) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clampedRisk = Math.min(Math.max(oxygenRiskScore ?? 0, 0), 100);
+
+  const activeBand = OXYGEN_RISK_BANDS.find((band) => status === band.key) ?? OXYGEN_RISK_BANDS[0];
+
+  return (
+    <div className="flex w-56 shrink-0 flex-col items-center justify-center gap-3 rounded-xl border bg-card p-5 shadow-sm animate-fade-in">
+      <span className="text-xs font-medium text-muted-foreground">Dissolved O₂</span>
+
+      <div className="relative">
+        <svg width={size} height={size} className="-rotate-90">
+          {OXYGEN_RISK_BANDS.map((band) => {
+            const segmentLength = ((band.max - band.min) / 100) * circumference;
+            const dashOffset = -((band.min / 100) * circumference);
+            const visibleLength = Math.max(segmentLength - segmentGap, 0);
+            return (
+              <circle
+                key={band.key}
+                cx={center}
+                cy={center}
+                r={radius}
+                fill="none"
+                stroke="hsl(var(--muted))"
+                strokeWidth={strokeWidth}
+                strokeDasharray={`${visibleLength} ${circumference}`}
+                strokeDashoffset={dashOffset}
+                strokeLinecap="butt"
+              />
+            );
+          })}
+          {OXYGEN_RISK_BANDS.map((band) => {
+            const segmentSpan = band.max - band.min;
+            const filledInBand = Math.min(Math.max(clampedRisk - band.min, 0), segmentSpan);
+            if (filledInBand <= 0) return null;
+
+            const filledLength = (filledInBand / 100) * circumference;
+            const dashOffset = -((band.min / 100) * circumference);
+            const visibleLength = Math.max(filledLength - segmentGap, 0);
+            return (
+              <circle
+                key={`${band.key}-fill`}
+                cx={center}
+                cy={center}
+                r={radius}
+                fill="none"
+                stroke={band.color}
+                strokeWidth={strokeWidth}
+                strokeDasharray={`${visibleLength} ${circumference}`}
+                strokeDashoffset={dashOffset}
+                strokeLinecap="butt"
+              />
+            );
+          })}
+        </svg>
+        {OXYGEN_THRESHOLD_MARKERS.map((threshold) => {
+          const angle = (threshold / 100) * 2 * Math.PI - Math.PI / 2;
+          const markerRadius = radius + 1;
+          const markerX = center + markerRadius * Math.cos(angle);
+          const markerY = center + markerRadius * Math.sin(angle);
+          return (
             <span
-              className="text-xs font-semibold transition-colors duration-300"
-              style={{ color: active ? bar.color : 'hsl(var(--muted-foreground))' }}
-            >
-              {bar.label}
-            </span>
-          </div>
-        );
-      })}
+              key={threshold}
+              className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-card bg-background shadow-sm"
+              style={{ left: markerX, top: markerY }}
+              title={threshold === 25 ? 'Normal threshold' : 'Moderate threshold'}
+            />
+          );
+        })}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight">
+          <span className="text-lg font-bold text-card-foreground">
+            {oxygenRiskScore == null ? '—' : `${oxygenRiskScore.toFixed(1)}%`}
+          </span>
+          <span className="text-sm font-semibold" style={{ color: statusTextColor[status] }}>
+            {activeBand.label}
+          </span>
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const TankDashboard = () => {
   const { tankId } = useParams<{ tankId: string }>();
@@ -120,7 +186,10 @@ const TankDashboard = () => {
             stressMode
           />
         </div>
-        <OxygenTrafficLight status={tank.oxygenStatus ?? 'safe'} />
+        <OxygenRiskGaugeCard
+          status={tank.oxygenStatus ?? 'safe'}
+          oxygenRiskScore={tank.oxygenRiskScore}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

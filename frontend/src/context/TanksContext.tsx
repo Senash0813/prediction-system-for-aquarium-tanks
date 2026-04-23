@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { tanks as initialTanks, Tank, generateTimeSeries, TankStatus } from '@/data/dummyData';
-import { saveTankConfig, deleteTankConfig, getTankCollections, getLatestReading, getLatestInsightsByType, getRiskHistory, getReadingsHistory, getTankConfig } from '@/api/client';
+import { saveTankConfig, deleteTankConfig, getTankCollections, getLatestReading, getLatestInsightsByType, getRiskHistory, getReadingsHistory, getTankConfig, mapTankId } from '@/api/client';
 
 interface TankDetails {
   temperatureMin: string; temperatureMax: string;
@@ -84,6 +84,19 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     return 'safe';
   };
 
+  const oxygenDetailsFromInsight = (ins: any) => {
+    const oxygen = ins?.oxygen ?? {};
+    const estimatedDoRaw = oxygen?.estimated_do_mgL ?? ins?.estimated_do_mgL;
+    const riskScoreRaw = oxygen?.oxygen_risk_score ?? ins?.oxygen_risk_score;
+    const estimatedDo = Number(estimatedDoRaw);
+    const riskScore = Number(riskScoreRaw);
+
+    return {
+      oxygenEstimatedDo: Number.isFinite(estimatedDo) ? estimatedDo : null,
+      oxygenRiskScore: Number.isFinite(riskScore) ? riskScore : null,
+    };
+  };
+
   const worstStatus = (...statuses: TankStatus[]): TankStatus => {
     if (statuses.includes('critical')) return 'critical';
     if (statuses.includes('warning')) return 'warning';
@@ -108,11 +121,12 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
     const turbStatus   = filterIns ? turbidityStatusFromInsight(filterIns) : 'safe' as TankStatus;
     const stressStatus = riskIns   ? stressStatusFromInsight(riskIns)     : 'safe' as TankStatus;
     const oxygenStatus = oxygenIns ? oxygenStatusFromInsight(oxygenIns)   : 'safe' as TankStatus;
+    const { oxygenEstimatedDo, oxygenRiskScore } = oxygenIns ? oxygenDetailsFromInsight(oxygenIns) : { oxygenEstimatedDo: null, oxygenRiskScore: null };
     const overallStatus = worstStatus(tempStatus, phStatus, turbStatus, stressStatus);
 
     const riskScore = riskIns?.risk_score != null ? Number(riskIns.risk_score) : null;
 
-    return { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus };
+    return { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus, oxygenEstimatedDo, oxygenRiskScore };
   };
 
   const formatBackendTimestampUtc = (ts: any): string => {
@@ -198,15 +212,18 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
       if (refreshInFlightRef.current) return;
       refreshInFlightRef.current = true;
       try {
-        const ids = tanksRef.current.map(t => t.id).filter(id => /^tank_\d+$/.test(id));
-        if (!ids.length) return;
+        const refreshTargets = tanksRef.current
+          .map((t) => ({ id: t.id, collectionName: mapTankId(t.id) }))
+          .filter((target) => /^tank_\d+$/.test(target.collectionName));
+
+        if (!refreshTargets.length) return;
 
         const results = await Promise.all(
-          ids.map(async (id) => {
+          refreshTargets.map(async ({ id, collectionName }) => {
             const [reading, insightsByType, tankConfig] = await Promise.all([
-              getLatestReading(id).catch(() => null),
-              getLatestInsightsByType(id).catch(() => null),
-              getTankConfig(id).catch(() => null),
+              getLatestReading(collectionName).catch(() => null),
+              getLatestInsightsByType(collectionName).catch(() => null),
+              getTankConfig(collectionName).catch(() => null),
             ]);
 
             const tempVal = reading && typeof reading.temperature === 'number' ? reading.temperature : Number(reading?.temperature);
@@ -217,6 +234,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
 
             return {
               id,
+              collectionName,
               reading,
               insightsByType,
               tankConfig,
@@ -239,7 +257,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
             const nextPh = u.phVal ?? t.ph.value;
             const nextTurb = u.turbVal ?? t.turbidity.value;
 
-            const { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus } =
+            const { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus, oxygenEstimatedDo, oxygenRiskScore } =
               deriveStatusesFromInsights(u.insightsByType);
 
             const nextRisk = riskScore ?? t.stressScore;
@@ -251,6 +269,8 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
               stressScore: nextRisk,
               status: overallStatus,
               oxygenStatus,
+              oxygenEstimatedDo,
+              oxygenRiskScore,
               temperature: {
                 ...t.temperature,
                 value: nextTemp,
@@ -338,7 +358,7 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
               const id = colName;
               const prettyName = colName.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 
-              const { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus } =
+              const { tempStatus, phStatus, turbStatus, overallStatus, riskScore, oxygenStatus, oxygenEstimatedDo, oxygenRiskScore } =
                 deriveStatusesFromInsights(insightsByType);
 
               const computedScore = Math.round((phVal + tempVal + turbVal) / 3);
@@ -413,6 +433,8 @@ export const TanksProvider = ({ children }: { children: ReactNode }) => {
                 stressScore: riskScore ?? computedScore,
                 status: overallStatus,
                 oxygenStatus,
+                oxygenEstimatedDo,
+                oxygenRiskScore,
                 insight: 'Auto-discovered tank from DB',
                 temperature: {
                   value: tempVal,

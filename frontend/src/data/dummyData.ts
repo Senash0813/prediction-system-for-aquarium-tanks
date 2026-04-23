@@ -39,6 +39,8 @@ export interface Tank {
   turbidityHistory: TimePoint[];
   notifications: Notification[];
   oxygenStatus?: TankStatus;
+  oxygenRiskScore?: number;
+  oxygenEstimatedDo?: number;
 }
 
 export const generateTimeSeries = (
