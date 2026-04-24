@@ -10,12 +10,10 @@ import CircularGauge from '@/components/CircularGauge';
 import { type TankStatus } from '@/data/dummyData';
 
 const OXYGEN_RISK_BANDS = [
-  { key: 'safe' as TankStatus, label: 'Normal', min: 0, max: 25, color: 'hsl(152, 60%, 42%)' },
-  { key: 'warning' as TankStatus, label: 'Moderate', min: 25, max: 50, color: 'hsl(38, 92%, 50%)' },
-  { key: 'critical' as TankStatus, label: 'Low', min: 50, max: 100, color: 'hsl(0, 72%, 55%)' },
+  { key: 'safe' as TankStatus, label: 'NORMAL RISK', min: 0, max: 25, color: 'hsl(152, 60%, 42%)' },
+  { key: 'warning' as TankStatus, label: 'MODERATE RISK', min: 25, max: 50, color: 'hsl(38, 92%, 50%)' },
+  { key: 'critical' as TankStatus, label: 'LOW RISK', min: 50, max: 100, color: 'hsl(0, 72%, 55%)' },
 ];
-
-const OXYGEN_THRESHOLD_MARKERS = [25, 50];
 
 const statusTextColor: Record<TankStatus, string> = {
   safe: 'hsl(152, 60%, 42%)',
@@ -26,11 +24,19 @@ const statusTextColor: Record<TankStatus, string> = {
 const OxygenRiskGaugeCard = ({ status, oxygenRiskScore }: { status: TankStatus; oxygenRiskScore?: number }) => {
   const size = 120;
   const strokeWidth = 10;
-  const segmentGap = 4;
   const center = size / 2;
   const radius = (size - strokeWidth * 2) / 2;
   const circumference = 2 * Math.PI * radius;
-  const clampedRisk = Math.min(Math.max(oxygenRiskScore ?? 0, 0), 100);
+  const clampedScore = Math.min(Math.max(oxygenRiskScore ?? 0, 0), 100);
+  const progressLength = (clampedScore / 100) * circumference;
+  const segmentGap = 4;
+
+  let ringColor = 'hsl(152, 60%, 42%)';
+  if (status === 'warning') {
+    ringColor = 'hsl(38, 92%, 50%)';
+  } else if (status === 'critical') {
+    ringColor = 'hsl(0, 72%, 55%)';
+  }
 
   const activeBand = OXYGEN_RISK_BANDS.find((band) => status === band.key) ?? OXYGEN_RISK_BANDS[0];
 
@@ -44,68 +50,48 @@ const OxygenRiskGaugeCard = ({ status, oxygenRiskScore }: { status: TankStatus; 
             const segmentLength = ((band.max - band.min) / 100) * circumference;
             const dashOffset = -((band.min / 100) * circumference);
             const visibleLength = Math.max(segmentLength - segmentGap, 0);
-            return (
-              <circle
-                key={band.key}
-                cx={center}
-                cy={center}
-                r={radius}
-                fill="none"
-                stroke="hsl(var(--muted))"
-                strokeWidth={strokeWidth}
-                strokeDasharray={`${visibleLength} ${circumference}`}
-                strokeDashoffset={dashOffset}
-                strokeLinecap="butt"
-              />
-            );
-          })}
-          {OXYGEN_RISK_BANDS.map((band) => {
-            const segmentSpan = band.max - band.min;
-            const filledInBand = Math.min(Math.max(clampedRisk - band.min, 0), segmentSpan);
-            if (filledInBand <= 0) return null;
+            const filledLength = Math.min(progressLength - ((band.min / 100) * circumference), visibleLength);
+            const visibleFillLength = Math.max(filledLength, 0);
 
-            const filledLength = (filledInBand / 100) * circumference;
-            const dashOffset = -((band.min / 100) * circumference);
-            const visibleLength = Math.max(filledLength - segmentGap, 0);
             return (
-              <circle
-                key={`${band.key}-fill`}
-                cx={center}
-                cy={center}
-                r={radius}
-                fill="none"
-                stroke={band.color}
-                strokeWidth={strokeWidth}
-                strokeDasharray={`${visibleLength} ${circumference}`}
-                strokeDashoffset={dashOffset}
-                strokeLinecap="butt"
-              />
+              <g key={band.key}>
+                <circle
+                  cx={center}
+                  cy={center}
+                  r={radius}
+                  fill="none"
+                  stroke="hsl(var(--muted))"
+                  strokeWidth={strokeWidth}
+                  strokeDasharray={`${visibleLength} ${circumference}`}
+                  strokeDashoffset={dashOffset}
+                  strokeLinecap="butt"
+                />
+                {visibleFillLength > 0 && (
+                  <circle
+                    cx={center}
+                    cy={center}
+                    r={radius}
+                    fill="none"
+                    stroke={ringColor}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={`${visibleFillLength} ${circumference}`}
+                    strokeDashoffset={dashOffset}
+                    strokeLinecap="butt"
+                  />
+                )}
+              </g>
             );
           })}
         </svg>
-        {OXYGEN_THRESHOLD_MARKERS.map((threshold) => {
-          const angle = (threshold / 100) * 2 * Math.PI - Math.PI / 2;
-          const markerRadius = radius + 1;
-          const markerX = center + markerRadius * Math.cos(angle);
-          const markerY = center + markerRadius * Math.sin(angle);
-          return (
-            <span
-              key={threshold}
-              className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-card bg-background shadow-sm"
-              style={{ left: markerX, top: markerY }}
-              title={threshold === 25 ? 'Normal threshold' : 'Moderate threshold'}
-            />
-          );
-        })}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight">
           <span className="text-lg font-bold text-card-foreground">
             {oxygenRiskScore == null ? '—' : `${oxygenRiskScore.toFixed(1)}%`}
           </span>
-          <span className="text-sm font-semibold" style={{ color: statusTextColor[status] }}>
-            {activeBand.label}
-          </span>
         </div>
       </div>
+      <span className="text-[11px] font-bold tracking-wide" style={{ color: statusTextColor[status] }}>
+        {activeBand.label}
+      </span>
     </div>
   );
 };

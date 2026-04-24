@@ -46,7 +46,7 @@ async def lifespan(_app: FastAPI):
     logger.info("Filter health insight scheduler running.")
 
     logger.info("Starting oxygen insight scheduler...")
-    start_periodic_oxygen_insights(interval_seconds=30.0)
+    start_periodic_oxygen_insights(interval_seconds=300.0)
     logger.info("Oxygen insight scheduler running.")
 
     yield  # Server is live and handling requests here
