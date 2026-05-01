@@ -7,16 +7,13 @@ from apscheduler.triggers.interval import IntervalTrigger
 from .settings import SCHEDULER_INTERVAL_SECONDS
 from .mongo_client import (
     fetch_recent_readings,
+    fetch_tank_config,
     get_all_tank_ids,
     close_connection,
     save_water_chemistry_insight,
 )
 from .insight_2_water_chemistry import generate_insight
 
-
-# ---------------------------------------------------------------------------
-# Logging setup
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -25,17 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Core job
-# ---------------------------------------------------------------------------
 def run_water_chemistry_insight_job():
-    """
-    Scheduled job that:
-    1. Finds all tank collections
-    2. Fetches recent readings
-    3. Generates water chemistry insight
-    4. Saves the insight to generated_insights.<tank_id>
-    """
     logger.info("=== Water chemistry insight job started ===")
     IST = timezone(timedelta(hours=5, minutes=30))
     run_time = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -59,9 +46,6 @@ def run_water_chemistry_insight_job():
 
 
 def _process_tank(tank_id: str):
-    """
-    Runs the full insight pipeline for one tank.
-    """
     try:
         logger.info(f"[{tank_id}] Fetching readings...")
         readings = fetch_recent_readings(tank_id)
@@ -70,8 +54,10 @@ def _process_tank(tank_id: str):
             logger.warning(f"[{tank_id}] No readings found. Skipping.")
             return
 
-        logger.info(f"[{tank_id}] Running water chemistry insight on {len(readings)} reading(s)...")
-        insight = generate_insight(tank_id, readings)
+        tank_config = fetch_tank_config(tank_id)
+
+        logger.info(f"[{tank_id}] Running hybrid water chemistry insight on {len(readings)} reading(s)...")
+        insight = generate_insight(tank_id, readings, tank_config)
 
         save_water_chemistry_insight(tank_id, insight)
         _log_insight(tank_id, insight)
@@ -83,9 +69,6 @@ def _process_tank(tank_id: str):
 
 
 def _log_insight(tank_id: str, insight: dict):
-    """
-    Logs insight result at a suitable log level.
-    """
     status = insight.get("status")
     message = insight.get("message")
 
@@ -101,20 +84,14 @@ def _log_insight(tank_id: str, insight: dict):
         logger.debug(f"[{tank_id}] Unknown status — raw insight: {insight}")
 
 
-# ---------------------------------------------------------------------------
-# Scheduler setup
-# ---------------------------------------------------------------------------
 def start_scheduler():
-    """
-    Starts APScheduler and runs the insight job every configured interval.
-    """
     scheduler = BlockingScheduler(timezone="UTC")
 
     scheduler.add_job(
         func=run_water_chemistry_insight_job,
         trigger=IntervalTrigger(seconds=SCHEDULER_INTERVAL_SECONDS),
         id="water_chemistry_insight_job",
-        name="Water Chemistry Insight Generation",
+        name="Hybrid Water Chemistry Insight Generation",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=60,
@@ -127,7 +104,6 @@ def start_scheduler():
     logger.info("Press Ctrl+C to stop.\n")
 
     try:
-        # Run once immediately
         run_water_chemistry_insight_job()
         scheduler.start()
 
@@ -139,27 +115,18 @@ def start_scheduler():
 
 
 def start_background_scheduler() -> BackgroundScheduler:
-    """
-    Starts a non-blocking BackgroundScheduler for use inside FastAPI.
-    Runs run_water_chemistry_insight_job() once immediately, then every
-    SCHEDULER_INTERVAL_SECONDS on a background thread.
-
-    Returns the scheduler instance so the caller (FastAPI lifespan) can
-    shut it down cleanly when the server stops.
-    """
     scheduler = BackgroundScheduler(timezone="UTC")
 
     scheduler.add_job(
         func=run_water_chemistry_insight_job,
         trigger=IntervalTrigger(seconds=SCHEDULER_INTERVAL_SECONDS),
         id="water_chemistry_insight_job",
-        name="Water Chemistry Insight Generation",
+        name="Hybrid Water Chemistry Insight Generation",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=60,
     )
 
-    # Run once immediately so the first insight isn't delayed.
     run_water_chemistry_insight_job()
     scheduler.start()
 

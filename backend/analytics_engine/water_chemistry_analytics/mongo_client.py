@@ -9,13 +9,18 @@ from .settings import (
     INSIGHTS_TTL_SECONDS,
     get_tank_collection_name,
     TREND_WINDOW_SIZE,
+    PH_SAFE_MIN,
+    PH_SAFE_MAX,
+    TDS_SAFE_MIN,
+    TDS_SAFE_MAX,
+    TEMPERATURE_SAFE_MIN,
+    TEMPERATURE_SAFE_MAX,
 )
 
 _client = None
 
 
 def get_client() -> MongoClient:
-    """Returns the shared MongoClient, creating it once if needed."""
     global _client
     if _client is None:
         _client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
@@ -23,25 +28,17 @@ def get_client() -> MongoClient:
 
 
 def get_db():
-    """Returns the main aquarium readings database handle."""
     return get_client()[MONGO_DB_NAME]
 
 
 def get_insights_db():
-    """Returns the generated insights database handle."""
     return get_client()[INSIGHTS_DB_NAME]
 
 
 def fetch_recent_readings(tank_id: str, limit: int = TREND_WINDOW_SIZE) -> list[dict]:
     """
-    Fetches the most recent readings for a tank, ordered oldest -> newest.
-
-    Only required fields are fetched:
-    - tank_id
-    - ph
-    - tds
-    - temperature
-    - timestamp
+    Fetches recent readings for current runtime analysis.
+    Ordered oldest -> newest.
     """
     try:
         collection = get_db()[get_tank_collection_name(tank_id)]
@@ -73,20 +70,103 @@ def fetch_recent_readings(tank_id: str, limit: int = TREND_WINDOW_SIZE) -> list[
         raise RuntimeError(f"[mongo_client] Query failed for {tank_id}: {e}")
 
 
+def fetch_all_readings_for_tank(tank_id: str) -> list[dict]:
+    """
+    Fetches all cleaned readings for one tank.
+    Used for ML training.
+    Ordered oldest -> newest.
+    """
+    try:
+        collection = get_db()[get_tank_collection_name(tank_id)]
+
+        cursor = (
+            collection
+            .find(
+                {},
+                {
+                    "_id": 0,
+                    "tank_id": 1,
+                    "ph": 1,
+                    "tds": 1,
+                    "temperature": 1,
+                    "timestamp": 1,
+                }
+            )
+            .sort("timestamp", ASCENDING)
+        )
+
+        return list(cursor)
+
+    except ConnectionFailure as e:
+        raise RuntimeError(f"[mongo_client] Could not connect to MongoDB: {e}")
+    except OperationFailure as e:
+        raise RuntimeError(f"[mongo_client] Query failed for {tank_id}: {e}")
+
+
+def fetch_tank_config(tank_id: str) -> dict:
+    """Fetch per-tank safe ranges from aqua_gaurd_db.tank_config.
+
+    Returns a dict with keys:
+        - ph: {min, max}
+        - tds: {min, max}
+        - temperature: {min, max}
+
+    Falls back to settings defaults if the document (or a field) is missing.
+    """
+    try:
+        collection = get_db()["tank_config"]
+        config = collection.find_one(
+            {"tank_id": tank_id},
+            {
+                "_id": 0,
+                "safe_ranges.ph": 1,
+                "safe_ranges.tds": 1,
+                "safe_ranges.temperature": 1,
+            },
+        )
+
+        safe_ranges = (config or {}).get("safe_ranges", {})
+
+        ph_range = safe_ranges.get("ph", {})
+        tds_range = safe_ranges.get("tds", {})
+        temp_range = safe_ranges.get("temperature", {})
+
+        return {
+            "ph": {
+                "min": float(ph_range.get("min", PH_SAFE_MIN)),
+                "max": float(ph_range.get("max", PH_SAFE_MAX)),
+            },
+            "tds": {
+                "min": float(tds_range.get("min", TDS_SAFE_MIN)),
+                "max": float(tds_range.get("max", TDS_SAFE_MAX)),
+            },
+            "temperature": {
+                "min": float(temp_range.get("min", TEMPERATURE_SAFE_MIN)),
+                "max": float(temp_range.get("max", TEMPERATURE_SAFE_MAX)),
+            },
+        }
+
+    except ConnectionFailure as e:
+        raise RuntimeError(f"[mongo_client] Could not connect to MongoDB: {e}")
+    except OperationFailure as e:
+        raise RuntimeError(f"[mongo_client] Failed to fetch tank config for {tank_id}: {e}")
+
+
 def get_all_tank_ids() -> list[str]:
     """
-    Returns all tank collections from the cleaned readings database.
+    Returns all cleaned tank collections.
+    Excludes tank_config.
     """
     try:
         all_collections = get_db().list_collection_names()
-        return [name for name in all_collections if name.startswith("tank_") and name != "tank_config"]
+        return [name for name in all_collections if name.startswith("tank_") and name not in {"tank_config", "tank_state"}]
     except Exception as e:
         raise RuntimeError(f"[mongo_client] Could not list collections: {e}")
 
 
 def save_water_chemistry_insight(tank_id: str, insight: dict) -> None:
     """
-    Saves a generated water chemistry insight to generated_insights.<tank_id>
+    Saves hybrid water chemistry insight to generated_insights.<tank_id>
     """
     try:
         collection = get_insights_db()[tank_id]
@@ -106,12 +186,16 @@ def save_water_chemistry_insight(tank_id: str, insight: dict) -> None:
             "generated_at": generated_at,
             "status": insight.get("status"),
             "message": insight.get("message"),
+            "safe_ranges": insight.get("safe_ranges"),
             "overall": insight.get("overall"),
             "ph": insight.get("ph"),
             "tds": insight.get("tds"),
             "temperature": insight.get("temperature"),
             "diagnosis": insight.get("diagnosis"),
             "recommendation": insight.get("recommendation"),
+            "ml_prediction": insight.get("ml_prediction"),
+            "ml_anomaly": insight.get("ml_anomaly"),
+            "hybrid_decision": insight.get("hybrid_decision"),
         }
 
         collection.insert_one(document)
@@ -123,7 +207,6 @@ def save_water_chemistry_insight(tank_id: str, insight: dict) -> None:
 
 
 def close_connection():
-    """Closes MongoDB connection cleanly."""
     global _client
     if _client is not None:
         _client.close()

@@ -1,13 +1,34 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, ShieldCheck } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, MessageCircle } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, ReferenceArea } from 'recharts';
 import { getMetricData, generateData, metricLabels } from '@/data/dummyData';
 import { getPhAnalysis, getRiskHistory, getReadingsHistory } from '@/api/client';
 import { useTanks } from '@/context/TanksContext';
 import { useChatContext } from '@/components/chatbot/ChatContext';
 
 type TimeRange = '24h' | '7d' | '30d';
+
+const ZONE_METRICS = new Set(['ph', 'temperature', 'turbidity']);
+
+const FALLBACK_SAFE_RANGES: Record<string, { min: number; max: number }> = {
+  ph:          { min: 6.5, max: 8.5 },
+  temperature: { min: 22,  max: 28  },
+  turbidity:   { min: 0,   max: 5   },
+};
+
+const CRITICAL_EXTREMES: Record<string, { min: number; max: number }> = {
+  ph:          { min: 5.5, max: 9.5  },
+  temperature: { min: 15,  max: 35   },
+  turbidity:   { min: 0,   max: 20   },
+};
+
+const classifyWithRanges = (value: number, metric: string, sMin: number, sMax: number): 'safe' | 'warn' | 'crit' => {
+  if (value >= sMin && value <= sMax) return 'safe';
+  const ext = CRITICAL_EXTREMES[metric];
+  if (ext && (value < ext.min || value > ext.max)) return 'crit';
+  return 'warn';
+};
 
 const MetricDetail = () => {
   const { tankId, metricId } = useParams<{ tankId: string; metricId: string }>();
@@ -32,10 +53,7 @@ const MetricDetail = () => {
   const variance = metricId === 'stress' ? 10 : metricId === 'temperature' ? 1.5 : metricId === 'ph' ? 0.3 : 1;
   const chartData = generateData(baseValue, variance, range);
 
-  const chartColor =
-    info.status === 'critical' ? 'hsl(0, 72%, 55%)' :
-    info.status === 'warning' ? 'hsl(38, 92%, 50%)' :
-    'hsl(152, 60%, 42%)';
+  const chartColor = 'hsl(217, 91%, 60%)';
 
   const isIsoLike = (v: any) => {
     if (typeof v !== 'string') return false;
@@ -179,6 +197,76 @@ const MetricDetail = () => {
     return chartData.map(d => ({ time: d.time, value: d.value }));
   })();
 
+  const hasZoneSupport = metricId != null && ZONE_METRICS.has(metricId);
+
+  const effectiveSafeMin = info.safeMin ?? (metricId ? FALLBACK_SAFE_RANGES[metricId]?.min : undefined);
+  const effectiveSafeMax = info.safeMax ?? (metricId ? FALLBACK_SAFE_RANGES[metricId]?.max : undefined);
+
+  const crossingIndices = (() => {
+    const indices = new Set<number>();
+    if (effectiveSafeMin == null || effectiveSafeMax == null || chartPoints.length < 2) return indices;
+    const inRange = (v: number) => v >= effectiveSafeMin! && v <= effectiveSafeMax!;
+    for (let i = 1; i < chartPoints.length; i++) {
+      if (inRange(chartPoints[i].value) !== inRange(chartPoints[i - 1].value)) {
+        indices.add(i - 1);
+        indices.add(i);
+      }
+    }
+    return indices;
+  })();
+
+  const zoneCounts = (() => {
+    if (!hasZoneSupport || effectiveSafeMin == null || effectiveSafeMax == null || chartPoints.length === 0) return null;
+    let safe = 0, warn = 0, crit = 0;
+    for (const p of chartPoints) {
+      const z = classifyWithRanges(p.value, metricId!, effectiveSafeMin, effectiveSafeMax);
+      if (z === 'safe') safe++;
+      else if (z === 'warn') warn++;
+      else crit++;
+    }
+    const total = chartPoints.length;
+    return {
+      safe: { count: safe, pct: Math.round((safe / total) * 100) },
+      warn: { count: warn, pct: Math.round((warn / total) * 100) },
+      crit: { count: crit, pct: Math.round((crit / total) * 100) },
+    };
+  })();
+
+  const periodComparison = (() => {
+    if (!hasZoneSupport || effectiveSafeMin == null || effectiveSafeMax == null || chartPoints.length < 4) return null;
+    const mid = Math.floor(chartPoints.length / 2);
+    const prev = chartPoints.slice(0, mid);
+    const curr = chartPoints.slice(mid);
+    const prevAvg = +(prev.reduce((s: number, p: any) => s + p.value, 0) / prev.length).toFixed(2);
+    const currAvg = +(curr.reduce((s: number, p: any) => s + p.value, 0) / curr.length).toFixed(2);
+    const delta = +(currAvg - prevAvg).toFixed(2);
+    const safeCenter = (effectiveSafeMin + effectiveSafeMax) / 2;
+    const improving = Math.abs(currAvg - safeCenter) < Math.abs(prevAvg - safeCenter);
+    return { prevAvg, currAvg, delta, improving };
+  })();
+
+  const halfLabel = range === '24h' ? '12 hours' : range === '7d' ? '3.5 days' : '15 days';
+
+  const isStress = metricId === 'stress';
+
+  const stressZones = (() => {
+    if (!isStress || chartPoints.length === 0) return null;
+    let low = 0, moderate = 0, high = 0;
+    for (const p of chartPoints) {
+      if (p.value <= 40) low++;
+      else if (p.value <= 70) moderate++;
+      else high++;
+    }
+    const total = chartPoints.length;
+    return {
+      low:      { count: low,      pct: Math.round((low      / total) * 100) },
+      moderate: { count: moderate, pct: Math.round((moderate / total) * 100) },
+      high:     { count: high,     pct: Math.round((high     / total) * 100) },
+    };
+  })();
+
+  const { setIsChatOpen, setPendingMessage } = useChatContext();
+
   const values = chartPoints.map(p => p.value);
   const avgValue = values.length
     ? +(values.reduce((s, v) => s + v, 0) / values.length).toFixed(2)
@@ -260,7 +348,35 @@ const MetricDetail = () => {
               tickFormatter={formatAxisValue}
               tickLine={false}
               axisLine={false}
+              domain={
+                isStress ? [0, 100] :
+                effectiveSafeMin != null && effectiveSafeMax != null
+                  ? [
+                      (dataMin: number) => +Math.min(dataMin, effectiveSafeMin! * (effectiveSafeMin! >= 0 ? 0.97 : 1.03)).toFixed(2),
+                      (dataMax: number) => +Math.max(dataMax, effectiveSafeMax! * (effectiveSafeMax! >= 0 ? 1.03 : 0.97)).toFixed(2),
+                    ]
+                  : ['auto', 'auto']
+              }
             />
+            {effectiveSafeMin != null && effectiveSafeMax != null && (
+              <ReferenceArea
+                y1={effectiveSafeMin}
+                y2={effectiveSafeMax}
+                fill="hsl(152, 60%, 42%)"
+                fillOpacity={0.08}
+                stroke="hsl(152, 60%, 42%)"
+                strokeOpacity={0.3}
+                strokeDasharray="4 2"
+              />
+            )}
+            {isStress && (
+              <ReferenceLine y={40} stroke="hsl(38, 92%, 50%)" strokeDasharray="5 3" strokeWidth={1.5}
+                label={{ value: 'Moderate', position: 'insideTopRight', fontSize: 10, fill: 'hsl(38, 92%, 50%)' }} />
+            )}
+            {isStress && (
+              <ReferenceLine y={70} stroke="hsl(0, 72%, 55%)" strokeDasharray="5 3" strokeWidth={1.5}
+                label={{ value: 'High', position: 'insideTopRight', fontSize: 10, fill: 'hsl(0, 72%, 55%)' }} />
+            )}
             <ReferenceLine y={avgValue} stroke="hsl(var(--muted-foreground))" strokeDasharray="6 3" opacity={0.5} />
             <Tooltip
               contentStyle={{
@@ -277,8 +393,17 @@ const MetricDetail = () => {
               dataKey="value"
               stroke={chartColor}
               strokeWidth={2.5}
-              dot={false}
               activeDot={{ r: 5, fill: chartColor }}
+              dot={(dotProps: any) => {
+                const { cx, cy, index } = dotProps;
+                if (!crossingIndices.has(index)) return <g key={index} />;
+                const v = chartPoints[index]?.value;
+                const isAbove = effectiveSafeMax != null && v > effectiveSafeMax;
+                const dotColor = isAbove || (effectiveSafeMin != null && v < effectiveSafeMin)
+                  ? (info.status === 'critical' ? 'hsl(0, 72%, 55%)' : 'hsl(38, 92%, 50%)')
+                  : chartColor;
+                return <circle key={index} cx={cx} cy={cy} r={4} fill={dotColor} stroke="hsl(var(--card))" strokeWidth={1.5} />;
+              }}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -309,61 +434,165 @@ const MetricDetail = () => {
         </div>
       </div>
 
-      {/* Trend Explanation */}
-      <div className="rounded-xl border bg-card p-6 shadow-sm">
-        <h3 className="mb-2 text-sm font-semibold text-card-foreground">📊 Trend Analysis</h3>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {label} has been {trendDir === 'up' ? 'trending upward' : trendDir === 'down' ? 'trending downward' : 'relatively stable'} over the selected period.
-          The current value of <strong>{info.value}{info.unit}</strong> is{' '}
-          {info.status === 'safe' ? 'within the safe operating range.' : info.status === 'warning' ? 'approaching the boundary of the safe range. Monitor closely.' : 'outside the safe range. Immediate action recommended.'}
-        </p>
-      </div>
-
-      {/* Risk Forecast */}
-      <div className={`rounded-xl border p-6 shadow-sm ${
-        info.status === 'critical' ? 'bg-critical/10 border-critical/30 dark:bg-critical/8 dark:border-critical/30' :
-        info.status === 'warning' ? 'bg-warning/10 border-warning/30 dark:bg-warning/8 dark:border-warning/30' :
-        'bg-safe/10 border-safe/30 dark:bg-safe/8 dark:border-safe/30'
-      }`}>
-        <h3 className="mb-2 text-sm font-semibold text-card-foreground">🔮 Risk Forecast</h3>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {info.status === 'critical'
-            ? `Based on current trends, ${label.toLowerCase()} is likely to remain in the critical zone. Corrective action should be taken within the next 1-2 hours to prevent fish stress escalation.`
-            : info.status === 'warning'
-            ? `${label} is projected to reach critical levels within 24-48 hours if the current trend continues. Consider preventive measures.`
-            : `${label} is forecasted to remain within safe parameters for the next 72 hours. No action required.`}
-        </p>
-      </div>
-
-      {/* Recommendations */}
-      <div className="rounded-xl border bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-3">
-          <ShieldCheck className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold text-card-foreground">Recommendations</h3>
+      {/* Time in Zone */}
+      {zoneCounts && (
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <h3 className="mb-4 text-sm font-semibold text-card-foreground">Time in Zone</h3>
+          <div className="flex h-2.5 w-full overflow-hidden rounded-full">
+            {zoneCounts.safe.pct > 0 && (
+              <div style={{ width: `${zoneCounts.safe.pct}%` }} className="bg-safe" />
+            )}
+            {zoneCounts.warn.pct > 0 && (
+              <div style={{ width: `${zoneCounts.warn.pct}%` }} className="bg-warning" />
+            )}
+            {zoneCounts.crit.pct > 0 && (
+              <div style={{ width: `${zoneCounts.crit.pct}%` }} className="bg-critical" />
+            )}
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-4">
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="inline-block h-2 w-2 rounded-full bg-safe" />
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Safe</span>
+              </div>
+              <p className="text-xl font-bold text-foreground">{zoneCounts.safe.pct}%</p>
+              <p className="text-xs text-muted-foreground">{zoneCounts.safe.count} readings</p>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="inline-block h-2 w-2 rounded-full bg-warning" />
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Warning</span>
+              </div>
+              <p className="text-xl font-bold text-foreground">{zoneCounts.warn.pct}%</p>
+              <p className="text-xs text-muted-foreground">{zoneCounts.warn.count} readings</p>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="inline-block h-2 w-2 rounded-full bg-critical" />
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Critical</span>
+              </div>
+              <p className="text-xl font-bold text-foreground">{zoneCounts.crit.pct}%</p>
+              <p className="text-xs text-muted-foreground">{zoneCounts.crit.count} readings</p>
+            </div>
+          </div>
         </div>
-        <ul className="space-y-2 text-sm text-muted-foreground">
-          {info.status === 'critical' && (
-            <>
-              <li className="flex gap-2"><span className="text-critical">•</span>Perform immediate partial water change (25-30%)</li>
-              <li className="flex gap-2"><span className="text-critical">•</span>Check and clean filtration system</li>
-              <li className="flex gap-2"><span className="text-critical">•</span>Verify heater/chiller settings</li>
-            </>
-          )}
-          {info.status === 'warning' && (
-            <>
-              <li className="flex gap-2"><span className="text-warning">•</span>Schedule water testing within 6 hours</li>
-              <li className="flex gap-2"><span className="text-warning">•</span>Prepare for partial water change if trend continues</li>
-              <li className="flex gap-2"><span className="text-warning">•</span>Monitor every 2 hours until stabilized</li>
-            </>
-          )}
-          {info.status === 'safe' && (
-            <>
-              <li className="flex gap-2"><span className="text-safe">•</span>Continue routine monitoring schedule</li>
-              <li className="flex gap-2"><span className="text-safe">•</span>Next maintenance check in 5 days</li>
-            </>
-          )}
-        </ul>
-      </div>
+      )}
+
+      {/* Period Comparison */}
+      {periodComparison && (
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <h3 className="mb-4 text-sm font-semibold text-card-foreground">Period Comparison</h3>
+          <div className="grid grid-cols-3 items-center gap-4">
+            <div className="text-center">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">Earlier {halfLabel}</p>
+              <p className="text-2xl font-bold text-foreground">{periodComparison.prevAvg}{info.unit}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">avg</p>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              {periodComparison.delta > 0 ? (
+                <TrendingUp className={`h-6 w-6 ${periodComparison.improving ? 'text-safe' : 'text-warning'}`} />
+              ) : periodComparison.delta < 0 ? (
+                <TrendingDown className={`h-6 w-6 ${periodComparison.improving ? 'text-safe' : 'text-warning'}`} />
+              ) : (
+                <Minus className="h-6 w-6 text-muted-foreground" />
+              )}
+              <span className={`text-xs font-semibold ${periodComparison.improving ? 'text-safe' : 'text-warning'}`}>
+                {periodComparison.delta > 0 ? '+' : ''}{periodComparison.delta}{info.unit}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {periodComparison.improving ? 'Improving' : 'Worsening'}
+              </span>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">Recent {halfLabel}</p>
+              <p className="text-2xl font-bold text-foreground">{periodComparison.currAvg}{info.unit}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">avg</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stress: Risk Level Breakdown */}
+      {stressZones && (
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <h3 className="mb-4 text-sm font-semibold text-card-foreground">Risk Level Breakdown</h3>
+          <div className="flex h-2.5 w-full overflow-hidden rounded-full">
+            {stressZones.low.pct > 0 && (
+              <div style={{ width: `${stressZones.low.pct}%` }} className="bg-safe" />
+            )}
+            {stressZones.moderate.pct > 0 && (
+              <div style={{ width: `${stressZones.moderate.pct}%` }} className="bg-warning" />
+            )}
+            {stressZones.high.pct > 0 && (
+              <div style={{ width: `${stressZones.high.pct}%` }} className="bg-critical" />
+            )}
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-4">
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="inline-block h-2 w-2 rounded-full bg-safe" />
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Low (0–40)</span>
+              </div>
+              <p className="text-xl font-bold text-foreground">{stressZones.low.pct}%</p>
+              <p className="text-xs text-muted-foreground">{stressZones.low.count} readings</p>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="inline-block h-2 w-2 rounded-full bg-warning" />
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Moderate (40–70)</span>
+              </div>
+              <p className="text-xl font-bold text-foreground">{stressZones.moderate.pct}%</p>
+              <p className="text-xs text-muted-foreground">{stressZones.moderate.count} readings</p>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="inline-block h-2 w-2 rounded-full bg-critical" />
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">High (70–100)</span>
+              </div>
+              <p className="text-xl font-bold text-foreground">{stressZones.high.pct}%</p>
+              <p className="text-xs text-muted-foreground">{stressZones.high.count} readings</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stress: Ask AquaBot button */}
+      {isStress && (
+        <button
+          onClick={() => {
+            setPendingMessage(
+              `What can I do to reduce the fish stress risk score in ${tank.name}? ` +
+              `The current score is ${currentValue} (${info.status} risk) and the ${range} average was ${avgValue}. ` +
+              `Please give me specific, actionable recommendations.`
+            );
+            setIsChatOpen(true);
+          }}
+          className="w-full flex items-center justify-center gap-2.5 rounded-xl border border-primary/40 bg-primary/5 px-6 py-4 text-sm font-semibold text-primary hover:bg-primary/10 active:scale-[0.99] transition-all shadow-sm"
+        >
+          <MessageCircle className="h-4 w-4" />
+          Ask Aqua-Bot for recommendations to reduce stress risk
+        </button>
+      )}
+
+      {/* Ask AquaBot (non-stress metrics) */}
+      {!isStress && (
+        <button
+          onClick={() => {
+            const metricMsg =
+              metricId === 'ph'
+                ? `The pH level in ${tank.name} is currently ${currentValue} (${info.status}) with a ${range} average of ${avgValue}. What should I do to stabilize it within the safe range?`
+                : metricId === 'temperature'
+                ? `The water temperature in ${tank.name} is currently ${currentValue}${info.unit} (${info.status}) with a ${range} average of ${avgValue}${info.unit}. What can I do to bring it back to the safe range?`
+                : `The turbidity in ${tank.name} is currently ${currentValue}${info.unit} (${info.status}) with a ${range} average of ${avgValue}${info.unit}. What can I do to improve water clarity?`;
+            setPendingMessage(metricMsg);
+            setIsChatOpen(true);
+          }}
+          className="w-full flex items-center justify-center gap-2.5 rounded-xl border border-primary/40 bg-primary/5 px-6 py-4 text-sm font-semibold text-primary hover:bg-primary/10 active:scale-[0.99] transition-all shadow-sm"
+        >
+          <MessageCircle className="h-4 w-4" />
+          Ask Aqua-Bot for {metricId === 'ph' ? 'pH stabilisation' : metricId === 'temperature' ? 'temperature control' : 'turbidity reduction'} recommendations
+        </button>
+      )}
     </div>
   );
 };

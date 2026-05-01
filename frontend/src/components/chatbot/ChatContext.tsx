@@ -47,15 +47,21 @@ export interface PageContext {
 interface ChatContextType {
   pageContext: PageContext | null;
   setPageContext: (ctx: PageContext | null) => void;
+  isChatOpen: boolean;
+  setIsChatOpen: (v: boolean) => void;
+  pendingMessage: string | null;
+  setPendingMessage: (v: string | null) => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [pageContext, setPageContext] = useState<PageContext | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   return (
-    <ChatContext.Provider value={{ pageContext, setPageContext }}>
+    <ChatContext.Provider value={{ pageContext, setPageContext, isChatOpen, setIsChatOpen, pendingMessage, setPendingMessage }}>
       {children}
     </ChatContext.Provider>
   );

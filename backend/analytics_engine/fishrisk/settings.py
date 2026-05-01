@@ -22,5 +22,20 @@ PH_DANGER_MAX = 8.0
 TURBIDITY_MODERATE = 20.0
 TURBIDITY_HIGH = 30.0
 
+# Resolve model path from this module directory so backend working directory does not matter.
+MODEL_FILENAME = os.path.join(os.path.dirname(__file__), "fish_risk_model.pkl")
+PREDICTION_HORIZON_MINUTES = 30
+
+# MongoDB stores light as category text, but the ML model was trained with numeric light.
+# So we map each category to a representative numeric value.
+LIGHT_CATEGORY_TO_NUMERIC = {
+    "Night Mode": 25.0,
+    "Dim Light": 250.0,
+    "Low Light": 1250.0,
+    "Ideal for Fish": 3500.0,
+    "Great for Plants": 7500.0,
+    "Too Bright": 12000.0,
+}
+
 def get_tank_collection_name(tank_id: str) -> str:
     return tank_id

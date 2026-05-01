@@ -18,17 +18,16 @@ const WELCOME_MESSAGE: Message = {
 };
 
 const ChatWidget = () => {
-  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [loading, setLoading] = useState(false);
-  const { pageContext } = useChatContext();
+  const { pageContext, isChatOpen, setIsChatOpen, pendingMessage, setPendingMessage } = useChatContext();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) {
+    if (isChatOpen) {
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     }
-  }, [messages, open]);
+  }, [messages, isChatOpen]);
 
   const handleSend = async (text: string) => {
     const userMsg: Message = { id: `u-${Date.now()}`, role: 'user', content: text };
@@ -65,9 +64,16 @@ const ChatWidget = () => {
     setMessages([WELCOME_MESSAGE]);
   };
 
+  useEffect(() => {
+    if (pendingMessage && isChatOpen) {
+      handleSend(pendingMessage);
+      setPendingMessage(null);
+    }
+  }, [pendingMessage, isChatOpen]);
+
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-      {open && (
+      {isChatOpen && (
         <div className="flex flex-col w-[420px] h-[620px] rounded-xl border border-border bg-card shadow-2xl overflow-hidden animate-fade-in">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3.5 bg-primary text-primary-foreground shrink-0">
@@ -89,7 +95,7 @@ const ChatWidget = () => {
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
               <button
-                onClick={() => setOpen(false)}
+                onClick={() => setIsChatOpen(false)}
                 className="rounded-md p-1.5 hover:bg-white/20 transition-colors"
               >
                 <X className="h-4 w-4" />
@@ -130,11 +136,11 @@ const ChatWidget = () => {
 
       {/* Toggle button */}
       <button
-        onClick={() => setOpen(prev => !prev)}
+        onClick={() => setIsChatOpen(!isChatOpen)}
         className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 active:scale-95 transition-all"
-        aria-label={open ? 'Close chat' : 'Open AquaGuard Assistant'}
+        aria-label={isChatOpen ? 'Close chat' : 'Open AquaGuard Assistant'}
       >
-        {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+        {isChatOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
     </div>
   );
